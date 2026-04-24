@@ -1,0 +1,436 @@
+import { useState } from "react";
+import { useApp, DEFAULT_SETTINGS } from "../context/AppContext";
+import { CONFIG } from "../config";
+import PageHeader from "../components/PageHeader";
+import { FormField, FormGrid } from "../components/Modal";
+import { uid } from "../lib/utils";
+import { openDrivePicker } from "../lib/googleDrive";
+
+function MigrateButton() {
+  const {
+    setRoutes,
+    setInvoices,
+    setStaff,
+    setPayments,
+    setRemittances,
+    setSettings,
+    routes,
+    invoices,
+    staff,
+    payments,
+    remittances,
+  } = useApp();
+  const [status, setStatus] = useState("");
+  const [running, setRunning] = useState(false);
+
+  const migrate = async () => {
+    setRunning(true);
+    setStatus("Reading localStorage…");
+    try {
+      const lsRoutes = JSON.parse(localStorage.getItem("cc_routes_v2") || "[]");
+      const lsInvoices = JSON.parse(
+        localStorage.getItem("cc_invoices_v2") || "[]",
+      );
+      const lsStaff = JSON.parse(localStorage.getItem("cc_staff_v2") || "[]");
+      const lsPayments = JSON.parse(
+        localStorage.getItem("cc_payments_v2") || "[]",
+      );
+      const lsRemittances = JSON.parse(
+        localStorage.getItem("cc_remittances_v2") || "[]",
+      );
+      const lsSettings = JSON.parse(
+        localStorage.getItem("cc_settings_v1") || "null",
+      );
+
+      const total =
+        lsRoutes.length +
+        lsInvoices.length +
+        lsStaff.length +
+        lsPayments.length +
+        lsRemittances.length;
+      if (total === 0) {
+        setStatus("No localStorage data found — nothing to migrate.");
+        setRunning(false);
+        return;
+      }
+
+      setStatus(`Found ${total} records. Merging…`);
+
+      // Merge — skip duplicates by id
+      const existingRouteIds = new Set(routes.map((x) => x.id));
+      const existingInvoiceIds = new Set(invoices.map((x) => x.id));
+      const existingStaffIds = new Set(staff.map((x) => x.id));
+      const existingPaymentIds = new Set(payments.map((x) => x.id));
+      const existingRemittanceIds = new Set(remittances.map((x) => x.id));
+
+      const newRoutes = lsRoutes.filter((x) => !existingRouteIds.has(x.id));
+      const newInvoices = lsInvoices.filter(
+        (x) => !existingInvoiceIds.has(x.id),
+      );
+      const newStaff = lsStaff.filter((x) => !existingStaffIds.has(x.id));
+      const newPayments = lsPayments.filter(
+        (x) => !existingPaymentIds.has(x.id),
+      );
+      const newRemittances = lsRemittances.filter(
+        (x) => !existingRemittanceIds.has(x.id),
+      );
+
+      setStatus("Saving to Supabase…");
+
+      if (newRoutes.length) await setRoutes([...routes, ...newRoutes]);
+      if (newInvoices.length) await setInvoices([...invoices, ...newInvoices]);
+      if (newStaff.length) await setStaff([...staff, ...newStaff]);
+      if (newPayments.length) await setPayments([...payments, ...newPayments]);
+      if (newRemittances.length)
+        await setRemittances([...remittances, ...newRemittances]);
+      if (lsSettings) await setSettings(lsSettings);
+
+      setStatus(
+        `✓ Migrated: ${newRoutes.length} routes, ${newInvoices.length} invoices, ` +
+          `${newStaff.length} staff, ${newPayments.length} payments, ${newRemittances.length} remittances.`,
+      );
+    } catch (e) {
+      setStatus("Error: " + e.message);
+    }
+    setRunning(false);
+  };
+
+  return (
+    <div className="space-y-2">
+      <button
+        className="btn-secondary text-sm"
+        onClick={migrate}
+        disabled={running}
+      >
+        {running ? "Migrating…" : "↑ Migrate localStorage → Supabase"}
+      </button>
+      {status && (
+        <p
+          className={`text-xs ${status.startsWith("✓") ? "text-green-600 dark:text-green-400" : "text-amber-700 dark:text-amber-400"}`}
+        >
+          {status}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DriveLogoUploader({ currentUrl, onChange }) {
+  const [loading, setLoading] = useState(false);
+
+  const pick = async () => {
+    setLoading(true);
+    try {
+      await openDrivePicker({
+        onPicked: (file) => {
+          const directUrl = `https://drive.google.com/uc?export=view&id=${file.id}`;
+          onChange(directUrl);
+        },
+        mimeTypes: "image/jpeg,image/png,image/webp,image/svg+xml",
+      });
+    } catch (e) {
+      console.error(e);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={pick}
+      disabled={loading}
+      className="btn-secondary text-sm"
+    >
+      {loading ? "Opening Drive…" : "↑ Upload from Google Drive"}
+    </button>
+  );
+}
+
+export default function Settings() {
+  const {
+    settings,
+    setSettings,
+    routes,
+    invoices,
+    staff,
+    payments,
+    remittances,
+  } = useApp();
+  const [form, setForm] = useState({ ...DEFAULT_SETTINGS, ...settings });
+  const [saved, setSaved] = useState(false);
+
+  const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  const save = () => {
+    setSettings({ ...form, vatRate: Number(form.vatRate) });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  const reset = () => {
+    if (confirm("Reset all settings to defaults?")) {
+      setForm({ ...DEFAULT_SETTINGS });
+      setSettings({ ...DEFAULT_SETTINGS });
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <PageHeader
+        title="Settings"
+        subtitle="Company details, tax and bank information"
+        actions={
+          <div className="flex items-center gap-2">
+            {saved && (
+              <span className="text-sm text-green-600 dark:text-green-400 font-medium">
+                ✓ Saved
+              </span>
+            )}
+            <button className="btn-secondary text-sm" onClick={reset}>
+              Reset defaults
+            </button>
+            <button className="btn-primary" onClick={save}>
+              Save settings
+            </button>
+          </div>
+        }
+      />
+
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-2xl space-y-6">
+          {/* Company info */}
+          <div className="card p-5 space-y-4">
+            <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
+              Company information
+            </h2>
+            <FormField label="Company name">
+              <input
+                className="input"
+                value={form.companyName}
+                onChange={f("companyName")}
+              />
+            </FormField>
+            <FormField label="Address">
+              <textarea
+                className="input"
+                rows={2}
+                value={form.address}
+                onChange={f("address")}
+              />
+            </FormField>
+            <FormGrid cols={2}>
+              <FormField label="Phone">
+                <input
+                  className="input"
+                  value={form.phone}
+                  onChange={f("phone")}
+                />
+              </FormField>
+              <FormField label="Email">
+                <input
+                  className="input"
+                  type="email"
+                  value={form.email}
+                  onChange={f("email")}
+                />
+              </FormField>
+            </FormGrid>
+          </div>
+
+          {/* Logo */}
+          {/* Logo */}
+          <div className="card p-5 space-y-4">
+            <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
+              Company logo
+            </h2>
+            <div className="flex items-center gap-5">
+              {/* Preview */}
+              <div className="flex-shrink-0">
+                {form.logoUrl ? (
+                  <>
+                    <img
+                      src={form.logoUrl}
+                      alt="Logo"
+                      className="h-16 w-16 object-contain rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-1"
+                      onError={(e) => {
+                        e.target.style.display = "none";
+                        e.target.nextSibling.style.display = "flex";
+                      }}
+                    />
+                    <div
+                      style={{
+                        display: "none",
+                        background: CONFIG.primaryColour,
+                      }}
+                      className="h-16 w-16 rounded-xl items-center justify-center text-white font-bold text-lg"
+                    >
+                      {CONFIG.companyInitials}
+                    </div>
+                  </>
+                ) : (
+                  <div
+                    className="w-16 h-16 rounded-xl flex items-center justify-center text-white font-bold text-lg"
+                    style={{ background: CONFIG.primaryColour }}
+                  >
+                    {CONFIG.companyInitials}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 space-y-3">
+                {/* Upload via Google Drive */}
+                <DriveLogoUploader
+                  currentUrl={form.logoUrl}
+                  onChange={(url) => setForm((p) => ({ ...p, logoUrl: url }))}
+                />
+                {/* Or paste URL directly */}
+                <FormField label="Or paste image URL directly">
+                  <input
+                    className="input text-sm"
+                    value={form.logoUrl || ""}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, logoUrl: e.target.value }))
+                    }
+                    placeholder="https://drive.google.com/uc?id=..."
+                  />
+                </FormField>
+                {form.logoUrl && (
+                  <button
+                    className="btn-ghost text-xs text-red-500 dark:text-red-400"
+                    onClick={() => setForm((p) => ({ ...p, logoUrl: "" }))}
+                  >
+                    Remove logo
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className="muted text-xs">
+              Logo is saved to your account settings. Recommended: square image,
+              minimum 200×200px, PNG or JPG.
+            </p>
+          </div>
+
+          {/* Tax / WSCC */}
+          <div className="card p-5 space-y-4">
+            <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
+              Tax &amp; council details
+            </h2>
+            <FormGrid cols={2}>
+              <FormField label="VAT registration number">
+                <input
+                  className="input font-mono"
+                  value={form.vatNumber}
+                  onChange={f("vatNumber")}
+                  placeholder="329462388"
+                />
+              </FormField>
+              <FormField label="VAT rate (%)">
+                <input
+                  className="input"
+                  type="number"
+                  value={form.vatRate}
+                  onChange={f("vatRate")}
+                  placeholder="20"
+                />
+              </FormField>
+            </FormGrid>
+            <FormField label="WSCC supplier number">
+              <input
+                className="input font-mono w-48"
+                value={form.supplierNumber}
+                onChange={f("supplierNumber")}
+                placeholder="103820"
+              />
+            </FormField>
+          </div>
+
+          {/* Bank details */}
+          <div className="card p-5 space-y-4">
+            <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
+              Bank details
+            </h2>
+            <FormField label="Account name">
+              <input
+                className="input"
+                value={form.accountName}
+                onChange={f("accountName")}
+              />
+            </FormField>
+            <FormGrid cols={2}>
+              <FormField label="Sort code">
+                <input
+                  className="input font-mono"
+                  value={form.sortCode}
+                  onChange={f("sortCode")}
+                  placeholder="30-99-50"
+                />
+              </FormField>
+              <FormField label="Account number">
+                <input
+                  className="input font-mono"
+                  value={form.accountNo}
+                  onChange={f("accountNo")}
+                  placeholder="48755760"
+                />
+              </FormField>
+            </FormGrid>
+          </div>
+
+          {/* Data management */}
+          <div className="card p-5 space-y-4">
+            <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
+              Data
+            </h2>
+
+            {/* localStorage migration */}
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                  Migrate data from local storage
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                  If you used the app before Supabase was set up, your old data
+                  is still in this browser's localStorage. Click below to
+                  migrate it to the cloud.
+                </p>
+              </div>
+              <MigrateButton />
+            </div>
+
+            {/* Export backup */}
+            <div>
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Export backup
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                Download all your Supabase data as a JSON backup file.
+              </p>
+              <button
+                className="btn-secondary text-sm"
+                onClick={() => {
+                  const data = {
+                    exportedAt: new Date().toISOString(),
+                    routes,
+                    invoices,
+                    staff,
+                    payments,
+                    remittances,
+                    settings,
+                  };
+                  const blob = new Blob([JSON.stringify(data, null, 2)], {
+                    type: "application/json",
+                  });
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(blob);
+                  a.download = `crown-cars-backup-${new Date().toISOString().split("T")[0]}.json`;
+                  a.click();
+                }}
+              >
+                ↓ Export backup (JSON)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
