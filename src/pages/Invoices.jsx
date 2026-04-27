@@ -41,7 +41,10 @@ export default function Invoices() {
   const [search, setSearch] = useState("");
   const [statusF, setStatusF] = useState("all");
   const [monthF, setMonthF] = useState("all");
-  const [yearF, setYearF] = useState(String(currentYear()));
+  const [yearF, setYearF] = useState(() => {
+    const s = localStorage.getItem("invoices_year");
+    return s !== null ? s : String(currentYear());
+  });
   const [showModal, setShowModal] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [editing, setEditing] = useState(null);
@@ -61,6 +64,7 @@ export default function Invoices() {
   const [genStartNum, setGenStartNum] = useState("");
   const [genDays, setGenDays] = useState({});
   const [genBandDays, setGenBandDays] = useState({});
+  const [genNotes, setGenNotes] = useState({});
 
   const nextInvoiceNum = () => {
     const nums = invoices.map((x) => parseInt(x.invoiceNumber)).filter(Boolean);
@@ -336,6 +340,7 @@ export default function Invoices() {
                   });
                 setGenDays(preFilled);
                 setGenBandDays({});
+                setGenNotes({});
                 setShowGen(true);
               }}
             >
@@ -532,7 +537,10 @@ export default function Invoices() {
           <select
             className="input w-28"
             value={yearF}
-            onChange={(e) => setYearF(e.target.value)}
+            onChange={(e) => {
+              setYearF(e.target.value);
+              localStorage.setItem("invoices_year", e.target.value);
+            }}
           >
             <option value="all">All years</option>
             {YEARS.map((y) => (
@@ -608,10 +616,15 @@ export default function Invoices() {
                         )}
                       </td>
                       <td className="td">
-                        <p className="font-medium text-gray-900 dark:text-gray-100">
+                        <p className="text-sm text-gray-900 dark:text-gray-100">
                           Route {inv.routeNumber}
                         </p>
                         <p className="muted">{inv.routeName}</p>
+                        {inv.notes && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400 italic mt-0.5">
+                            {inv.notes}
+                          </p>
+                        )}
                       </td>
                       <td className="td text-gray-600 dark:text-gray-400">
                         {MONTHS_SHORT[inv.month]} {inv.year}
@@ -746,83 +759,160 @@ export default function Invoices() {
                             <p className="muted">PO: {r.poNumber || "—"}</p>
                           </div>
                           {(!r.rateBands || r.rateBands.length === 0) && (
-                            <div className="flex items-center gap-3">
-                              <div className="text-right">
-                                <input
-                                  className="input w-20 text-center"
-                                  type="number"
-                                  min="0"
-                                  placeholder="Days"
-                                  value={genDays[r.id] || ""}
-                                  onChange={(e) =>
-                                    setGenDays((p) => ({
-                                      ...p,
-                                      [r.id]: e.target.value,
-                                    }))
-                                  }
-                                />
-                                {(() => {
-                                  const attDays = getAttendanceDays(
-                                    r.id,
-                                    genMonth,
-                                    genYear,
-                                  );
-                                  return attDays > 0 ? (
-                                    <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-0.5">
-                                      📋 {attDays}d from register
-                                    </p>
-                                  ) : null;
-                                })()}
-                              </div>
-                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-24 text-right">
-                                {genDays[r.id]
-                                  ? fmt(Number(genDays[r.id]) * r.dailyRate)
-                                  : "—"}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        {r.rateBands?.length > 0 && (
-                          <div className="space-y-1.5 pt-1">
-                            {r.rateBands.map((b) => (
-                              <div
-                                key={b.id}
-                                className="flex items-center gap-3"
-                              >
-                                <span className="text-xs text-gray-600 dark:text-gray-400 flex-1 truncate">
-                                  {b.description}
-                                </span>
-                                <span className="text-xs text-gray-500 dark:text-gray-400 w-20 text-right">
-                                  {fmt(b.wsccRate)}/day
-                                </span>
-                                <input
-                                  className="input w-20 text-center"
-                                  type="number"
-                                  min="0"
-                                  placeholder="Days"
-                                  value={genBandDays[r.id]?.[b.id] || ""}
-                                  onChange={(e) =>
-                                    setGenBandDays((p) => ({
-                                      ...p,
-                                      [r.id]: {
-                                        ...(p[r.id] || {}),
-                                        [b.id]: e.target.value,
-                                      },
-                                    }))
-                                  }
-                                />
+                            <div className="space-y-1.5 w-full">
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <input
+                                    className="input w-20 text-center"
+                                    type="number"
+                                    min="0"
+                                    placeholder="Days"
+                                    value={genDays[r.id] || ""}
+                                    onChange={(e) =>
+                                      setGenDays((p) => ({
+                                        ...p,
+                                        [r.id]: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                  {(() => {
+                                    const attDays = getAttendanceDays(
+                                      r.id,
+                                      genMonth,
+                                      genYear,
+                                    );
+                                    return attDays > 0 ? (
+                                      <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-0.5">
+                                        📋 {attDays}d from register
+                                      </p>
+                                    ) : null;
+                                  })()}
+                                </div>
                                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-24 text-right">
-                                  {genBandDays[r.id]?.[b.id]
-                                    ? fmt(
-                                        Number(genBandDays[r.id][b.id]) *
-                                          Number(b.wsccRate),
-                                      )
+                                  {genDays[r.id]
+                                    ? fmt(Number(genDays[r.id]) * r.dailyRate)
                                     : "—"}
                                 </span>
                               </div>
-                            ))}
-                          </div>
-                        )}
+                              {/* Partial month note — shown when days look fewer than expected */}
+                              <input
+                                className="input text-xs py-1"
+                                value={genNotes[r.id] || ""}
+                                onChange={(e) =>
+                                  setGenNotes((p) => ({
+                                    ...p,
+                                    [r.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder="Note (optional) e.g. Route cancelled from 15th — 8 days only"
+                              />
+                            </div>
+                          )}
+                        </div>
+                        {r.rateBands?.length > 0 &&
+                          (() => {
+                            const additiveBands = r.rateBands.filter(
+                              (b) => b.isAdditive,
+                            );
+                            const replacementBands = r.rateBands.filter(
+                              (b) => !b.isAdditive,
+                            );
+                            const allAdditive =
+                              replacementBands.length === 0 &&
+                              additiveBands.length > 0;
+                            return (
+                              <div className="space-y-1.5 pt-1">
+                                {/* If all bands are additive, show standard days field too */}
+                                {allAdditive && (
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-xs text-gray-600 dark:text-gray-400 flex-1">
+                                      Standard run ({fmt(r.dailyRate)}/day)
+                                    </span>
+                                    <div className="text-right">
+                                      <input
+                                        className="input w-20 text-center"
+                                        type="number"
+                                        min="0"
+                                        placeholder="Days"
+                                        value={genDays[r.id] || ""}
+                                        onChange={(e) =>
+                                          setGenDays((p) => ({
+                                            ...p,
+                                            [r.id]: e.target.value,
+                                          }))
+                                        }
+                                      />
+                                      {(() => {
+                                        const attDays = getAttendanceDays(
+                                          r.id,
+                                          genMonth,
+                                          genYear,
+                                        );
+                                        return attDays > 0 ? (
+                                          <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-0.5">
+                                            📋 {attDays}d from register
+                                          </p>
+                                        ) : null;
+                                      })()}
+                                    </div>
+                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-24 text-right">
+                                      {genDays[r.id]
+                                        ? fmt(
+                                            Number(genDays[r.id]) * r.dailyRate,
+                                          )
+                                        : "—"}
+                                    </span>
+                                  </div>
+                                )}
+                                {/* All rate bands */}
+                                {r.rateBands.map((b) => (
+                                  <div
+                                    key={b.id}
+                                    className="flex items-center gap-3"
+                                  >
+                                    <span
+                                      className={`text-xs flex-1 truncate ${b.isAdditive ? "text-green-600 dark:text-green-400" : "text-gray-600 dark:text-gray-400"}`}
+                                    >
+                                      {b.isAdditive ? "+ " : ""}
+                                      {b.description}
+                                      {b.isAdditive && (
+                                        <span className="ml-1 text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1 rounded">
+                                          add-on
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400 w-20 text-right">
+                                      {fmt(b.wsccRate)}/day
+                                    </span>
+                                    <input
+                                      className="input w-20 text-center"
+                                      type="number"
+                                      min="0"
+                                      placeholder="Days"
+                                      value={genBandDays[r.id]?.[b.id] || ""}
+                                      onChange={(e) =>
+                                        setGenBandDays((p) => ({
+                                          ...p,
+                                          [r.id]: {
+                                            ...(p[r.id] || {}),
+                                            [b.id]: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-24 text-right">
+                                      {genBandDays[r.id]?.[b.id]
+                                        ? fmt(
+                                            Number(genBandDays[r.id][b.id]) *
+                                              Number(b.wsccRate),
+                                          )
+                                        : "—"}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                       </div>
                     ))}
                 </div>
@@ -863,7 +953,14 @@ export default function Invoices() {
 
                   let netTotal, daysWorked, unitPrice;
                   if (usesBands) {
-                    netTotal = r.rateBands
+                    const allAdditive = r.rateBands.every((b) => b.isAdditive);
+                    // Standard days (only for all-additive band routes)
+                    const stdDays = allAdditive
+                      ? Number(genDays[r.id] || 0)
+                      : 0;
+                    const stdAmount = stdDays * Number(r.dailyRate);
+                    // Band amounts
+                    const bandAmount = r.rateBands
                       .filter((b) => bands[b.id] && Number(bands[b.id]) > 0)
                       .reduce(
                         (s, b) =>
@@ -874,10 +971,12 @@ export default function Invoices() {
                             100,
                         0,
                       );
-                    daysWorked = r.rateBands.reduce(
+                    const bandDays = r.rateBands.reduce(
                       (s, b) => s + (Number(bands[b.id]) || 0),
                       0,
                     );
+                    netTotal = Math.round((stdAmount + bandAmount) * 100) / 100;
+                    daysWorked = stdDays + bandDays;
                     unitPrice = daysWorked > 0 ? netTotal / daysWorked : 0;
                   } else {
                     daysWorked = Number(genDays[r.id] || 0);
@@ -899,6 +998,7 @@ export default function Invoices() {
                     month: genMonth,
                     year: genYear,
                     bands,
+                    notes: genNotes[r.id] || "",
                   });
 
                   // Build invoice record
@@ -919,6 +1019,7 @@ export default function Invoices() {
                     status: "unpaid",
                     paidAmount: 0,
                     fileName: "",
+                    notes: genNotes[r.id] || "",
                     createdAt: Date.now(),
                   });
                 });

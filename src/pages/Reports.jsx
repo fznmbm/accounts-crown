@@ -108,7 +108,10 @@ function exportStaffPayments(payments, staff, year) {
 // ── Component ────────────────────────────────────────────────────────────────
 export default function Reports() {
   const { invoices, payments, staff, routes, allocations, settings } = useApp();
-  const [year, setYear] = useState(currentYear());
+  const [year, setYear] = useState(() => {
+    const s = localStorage.getItem("reports_year");
+    return s !== null ? parseInt(s) : currentYear();
+  });
 
   // Monthly P&L
   const monthly = Array.from({ length: 12 }, (_, i) => {
@@ -246,7 +249,11 @@ export default function Reports() {
             <select
               className="input w-28"
               value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setYear(v);
+                localStorage.setItem("reports_year", v);
+              }}
             >
               {YEARS.map((y) => (
                 <option key={y} value={y}>

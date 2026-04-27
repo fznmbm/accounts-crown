@@ -22,6 +22,7 @@ const EMPTY = {
   notes: "",
   rateBands: [],
   documents: [],
+  operationalDays: [1, 2, 3, 4, 5],
 };
 
 export default function Routes() {
@@ -60,6 +61,7 @@ export default function Routes() {
       rateBands: r.rateBands || [],
       suspended: r.suspended || false,
       documents: r.documents || [],
+      operationalDays: r.operationalDays || [1, 2, 3, 4, 5],
     });
     setEditing(r);
     setShowModal(true);
@@ -90,6 +92,7 @@ export default function Routes() {
       suspended: form.suspended === true || form.suspended === "true",
       rateBands: form.rateBands || [],
       documents: form.documents || [],
+      operationalDays: form.operationalDays || [1, 2, 3, 4, 5],
       active: form.active === true || form.active === "true",
       createdAt: editing?.createdAt || Date.now(),
     };
@@ -147,19 +150,19 @@ export default function Routes() {
     setShowPOModal(false);
   };
 
-  const filtered = routes
-    .filter((r) => {
-      if (filter === "active" && !r.active) return false;
-      if (filter === "inactive" && r.active) return false;
-      if (
-        search &&
-        !r.number.includes(search) &&
-        !r.name.toLowerCase().includes(search.toLowerCase())
-      )
-        return false;
-      return true;
-    })
-    .sort((a, b) => Number(a.number) - Number(b.number));
+  const filtered = routes.filter((r) => {
+    if (filter === "active" && !r.active) return false;
+    if (filter === "inactive" && r.active) return false;
+    if (
+      search &&
+      !r.number.includes(search) &&
+      !r.name.toLowerCase().includes(search.toLowerCase())
+    )
+      return false;
+    return true;
+  });
+  //.sort((a, b) => Number(a.number) - Number(b.number));
+  // route number sorting can be tricky if they have different formats, so we'll keep the order as-is for now and rely on users to use consistent numbering
 
   const getName = (id) => staff.find((s) => s.id === id)?.name || "—";
 
@@ -481,10 +484,10 @@ export default function Routes() {
                   className="flex items-start gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
                 >
                   <div className="flex-1 grid grid-cols-3 gap-2">
-                    <div className="col-span-3">
+                    <div className="col-span-3 space-y-2">
                       <input
                         className="input text-sm"
-                        placeholder="Description e.g. Mon–Wed 2 children"
+                        placeholder="Description e.g. Extra PM pickup Wednesday"
                         value={band.description}
                         onChange={(e) =>
                           setForm((p) => ({
@@ -497,6 +500,31 @@ export default function Routes() {
                           }))
                         }
                       />
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={band.isAdditive || false}
+                          onChange={(e) =>
+                            setForm((p) => ({
+                              ...p,
+                              rateBands: p.rateBands.map((b, j) =>
+                                j === i
+                                  ? { ...b, isAdditive: e.target.checked }
+                                  : b,
+                              ),
+                            }))
+                          }
+                          className="w-4 h-4 rounded"
+                        />
+                        <span className="text-xs text-gray-600 dark:text-gray-400">
+                          Additive — this is an{" "}
+                          <strong>extra charge on top of</strong> the standard
+                          rate
+                        </span>
+                        {band.isAdditive && (
+                          <span className="chip-green text-xs">+ Add-on</span>
+                        )}
+                      </label>
                     </div>
                     <div>
                       <label className="label mb-1">WSCC rate (£)</label>
@@ -571,6 +599,66 @@ export default function Routes() {
               documents={form.documents || []}
               onChange={(docs) => setForm((p) => ({ ...p, documents: docs }))}
             />
+
+            <FormField
+              label="Operational days"
+              hint="Which days this route runs — used in attendance register"
+            >
+              <div className="flex gap-2 flex-wrap mt-1">
+                {[
+                  { label: "Sun", value: 0 },
+                  { label: "Mon", value: 1 },
+                  { label: "Tue", value: 2 },
+                  { label: "Wed", value: 3 },
+                  { label: "Thu", value: 4 },
+                  { label: "Fri", value: 5 },
+                  { label: "Sat", value: 6 },
+                ].map((d) => {
+                  const active = (
+                    form.operationalDays || [1, 2, 3, 4, 5]
+                  ).includes(d.value);
+                  return (
+                    <button
+                      key={d.value}
+                      type="button"
+                      onClick={() =>
+                        setForm((p) => ({
+                          ...p,
+                          operationalDays: active
+                            ? (p.operationalDays || [1, 2, 3, 4, 5]).filter(
+                                (x) => x !== d.value,
+                              )
+                            : [
+                                ...(p.operationalDays || [1, 2, 3, 4, 5]),
+                                d.value,
+                              ].sort(),
+                        }))
+                      }
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        active
+                          ? d.value === 0 || d.value === 6
+                            ? "bg-orange-500 text-white"
+                            : "bg-blue-600 text-white"
+                          : "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600"
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                {(form.operationalDays || []).length} day
+                {(form.operationalDays || []).length !== 1 ? "s" : ""} per week
+                {(form.operationalDays || []).some(
+                  (d) => d === 0 || d === 6,
+                ) && (
+                  <span className="ml-2 text-orange-600 dark:text-orange-400">
+                    ⚠ Includes weekend days
+                  </span>
+                )}
+              </p>
+            </FormField>
 
             <FormField label="Notes">
               <textarea

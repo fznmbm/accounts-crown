@@ -30,6 +30,8 @@ const EMPTY = {
   reference: "",
   notes: "",
   allocationIds: [],
+  isExternal: false,
+  externalName: "",
 };
 
 export default function Payments() {
@@ -48,7 +50,7 @@ export default function Payments() {
   const close = () => setShowModal(false);
 
   const save = () => {
-    if (!form.staffId || !form.amount) return;
+    if ((!form.staffId && !form.externalName) || !form.amount) return;
     const record = {
       id: uid(),
       ...form,
@@ -63,7 +65,7 @@ export default function Payments() {
     setPayments([...payments, record], {
       action: "create",
       id: record.id,
-      label: `Payment to ${staff.find((s) => s.id === form.staffId)?.name} — ${fmt(record.amount)}`,
+      label: `Payment to ${form.isExternal ? form.externalName : staff.find((s) => s.id === form.staffId)?.name} — ${fmt(record.amount)}`,
     });
     close();
   };
@@ -212,11 +214,20 @@ export default function Payments() {
                     <td className="td">
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 avatar text-xs">
-                          {getName(p.staffId)[0]}
+                          {p.isExternal
+                            ? p.externalName?.[0] || "E"
+                            : getName(p.staffId)[0]}
                         </div>
-                        <span className="font-medium text-gray-900 dark:text-gray-100">
-                          {getName(p.staffId)}
-                        </span>
+                        <div>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">
+                            {p.isExternal ? p.externalName : getName(p.staffId)}
+                          </span>
+                          {p.isExternal && (
+                            <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">
+                              External
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="td text-gray-600 dark:text-gray-400">
@@ -265,19 +276,44 @@ export default function Payments() {
         <Modal title="Log staff payment" onClose={close}>
           <div className="space-y-4">
             <FormField label="Staff member *">
-              <select
-                className="input"
-                value={form.staffId}
-                onChange={f("staffId")}
-              >
-                <option value="">Select staff member…</option>
-                {staff.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.type?.replace("_", " ")})
-                  </option>
-                ))}
-              </select>
+              {form.isExternal ? (
+                <input
+                  className="input"
+                  value={form.externalName}
+                  onChange={f("externalName")}
+                  placeholder="e.g. Ahmed Khan — ABC Taxis"
+                />
+              ) : (
+                <select
+                  className="input"
+                  value={form.staffId}
+                  onChange={f("staffId")}
+                >
+                  <option value="">Select staff…</option>
+                  {staff.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </FormField>
+            <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer -mt-2">
+              <input
+                type="checkbox"
+                checked={form.isExternal}
+                onChange={(e) =>
+                  setForm((p) => ({
+                    ...p,
+                    isExternal: e.target.checked,
+                    staffId: "",
+                    externalName: "",
+                  }))
+                }
+                className="w-3.5 h-3.5 rounded"
+              />
+              External / one-off payment (driver not in staff list)
+            </label>
             <FormGrid cols={2}>
               <FormField label="Amount (£) *">
                 <input

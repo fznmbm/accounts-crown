@@ -12,6 +12,8 @@ export function generateInvoicePDF({
   month,
   year,
   bands,
+  notes,
+  standardDays = 0,
 }) {
   const vatRate = Number(settings?.vatRate || 20);
   const address = (
@@ -22,19 +24,37 @@ export function generateInvoicePDF({
   const usesBands =
     bands && Object.keys(bands).length > 0 && route.rateBands?.length > 0;
 
+  const allAdditive = usesBands && route.rateBands?.every((b) => b.isAdditive);
+
   const lines = usesBands
-    ? route.rateBands
-        .filter((b) => bands[b.id] && Number(bands[b.id]) > 0)
-        .map((b) => ({
-          description: `Route ${route.number} ${route.name} — ${b.description}`,
-          qty: Number(bands[b.id]),
-          unitPrice: Number(b.wsccRate),
-          amount:
-            Math.round(Number(bands[b.id]) * Number(b.wsccRate) * 100) / 100,
-        }))
+    ? [
+        // Standard run line — only when all bands are additive
+        ...(allAdditive && standardDays > 0
+          ? [
+              {
+                description: `Route ${route.number} ${route.name} — Standard run${notes ? ` — ${notes}` : ""}`,
+                qty: standardDays,
+                unitPrice: Number(route.dailyRate),
+                amount:
+                  Math.round(standardDays * Number(route.dailyRate) * 100) /
+                  100,
+              },
+            ]
+          : []),
+        // Band lines
+        ...route.rateBands
+          .filter((b) => bands[b.id] && Number(bands[b.id]) > 0)
+          .map((b) => ({
+            description: `Route ${route.number} ${route.name} — ${b.description}`,
+            qty: Number(bands[b.id]),
+            unitPrice: Number(b.wsccRate),
+            amount:
+              Math.round(Number(bands[b.id]) * Number(b.wsccRate) * 100) / 100,
+          })),
+      ]
     : [
         {
-          description: `Route ${route.number} ${route.name}`,
+          description: `Route ${route.number} ${route.name}${notes ? `\n${notes}` : ""}`,
           qty: Number(daysWorked),
           unitPrice: Number(route.dailyRate),
           amount:
@@ -121,7 +141,7 @@ tbody td { border: 1px solid #bbb; padding: 6px 10px; }
         .map(
           (l) => `
       <tr>
-        <td>${l.description}</td>
+        <td>${l.description}${notes ? `<br><span style="font-size:8.5pt;color:#64748b;font-style:italic;">${notes}</span>` : ""}</td>
         <td class="c">${l.qty}</td>
         <td class="c">${l.unitPrice.toFixed(2)}</td>
         <td class="r">${fmt(l.amount)}</td>

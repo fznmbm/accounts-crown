@@ -24,7 +24,10 @@ function BalancePill({ balance }) {
 export default function StaffLedger() {
   const { staff, payments, allocations } = useApp();
   const [selected, setSelected] = useState(null);
-  const [yearF, setYearF] = useState(currentYear());
+  const [yearF, setYearF] = useState(() => {
+    const s = localStorage.getItem("ledger_year");
+    return s !== null ? (s === "all" ? "all" : parseInt(s)) : currentYear();
+  });
 
   // ── Per-staff summary ──────────────────────────────────────────────────────
   const summaries = staff.map((s) => {
@@ -256,11 +259,12 @@ export default function StaffLedger() {
                 <select
                   className="input w-28 ml-auto"
                   value={yearF}
-                  onChange={(e) =>
-                    setYearF(
-                      e.target.value === "all" ? "all" : Number(e.target.value),
-                    )
-                  }
+                  onChange={(e) => {
+                    const v =
+                      e.target.value === "all" ? "all" : Number(e.target.value);
+                    setYearF(v);
+                    localStorage.setItem("ledger_year", v);
+                  }}
                 >
                   <option value="all">All time</option>
                   {YEARS.map((y) => (

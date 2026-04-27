@@ -1,9 +1,10 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
 
 export const DEFAULT_SETTINGS = {
   companyName: "Crown Cars Ltd",
+  logoUrl: "",
   address: "1 John Brackpool Close, Crawley, RH10 8FA",
   phone: "01444 300315",
   email: "crowncarslimited@gmail.com",
@@ -28,6 +29,7 @@ const routeFromDb = (r) => ({
   driverDailyRate: r.driver_daily_rate,
   active: r.active,
   suspended: r.suspended || false,
+  operationalDays: r.operational_days || [1, 2, 3, 4, 5],
   notes: r.notes,
   documents: r.documents || [],
   createdAt: r.created_at,
@@ -45,6 +47,7 @@ const routeToDb = (r, uid) => ({
   driver_daily_rate: r.driverDailyRate,
   active: r.active,
   suspended: r.suspended || false,
+  operational_days: r.operationalDays || [1, 2, 3, 4, 5],
   notes: r.notes,
   documents: r.documents || [],
   created_at: r.createdAt,
@@ -73,6 +76,7 @@ const invoiceFromDb = (x) => ({
   revisionNote: x.revision_note || "",
   originalInvoiceId: x.original_invoice_id || null,
   createdAt: x.created_at,
+  notes: x.notes || "",
 });
 const invoiceToDb = (x, uid) => ({
   id: x.id,
@@ -98,6 +102,7 @@ const invoiceToDb = (x, uid) => ({
   revision_note: x.revisionNote || "",
   original_invoice_id: x.originalInvoiceId || null,
   created_at: x.createdAt,
+  notes: x.notes || "",
 });
 
 const staffFromDb = (s) => ({
@@ -196,6 +201,7 @@ const allocationFromDb = (a) => ({
   tempDays: a.temp_days,
   tempRate: a.temp_rate,
   tempAmount: a.temp_amount,
+  coverEntries: a.cover_entries || [],
   absenceReason: a.absence_reason || "",
   notes: a.notes,
   createdAt: a.created_at,
@@ -218,6 +224,7 @@ const allocationToDb = (a, uid) => ({
   temp_days: a.tempDays,
   temp_rate: a.tempRate,
   temp_amount: a.tempAmount,
+  cover_entries: a.coverEntries || [],
   absence_reason: a.absenceReason || "",
   notes: a.notes,
   created_at: a.createdAt,
@@ -291,15 +298,29 @@ const attendanceFromDb = (a) => ({
   routeNumber: a.route_number,
   status: a.status || "ran",
   daysValue: a.days_value ?? 1,
+  isSplitRun: a.is_split_run || false,
+  amDriverId: a.am_driver_id,
+  amDriverName: a.am_driver_name,
+  pmDriverId: a.pm_driver_id,
+  pmDriverName: a.pm_driver_name,
+  amPaId: a.am_pa_id || null,
+  amPaName: a.am_pa_name || null,
+  pmPaId: a.pm_pa_id || null,
+  pmPaName: a.pm_pa_name || null,
   driverId: a.driver_id,
   driverName: a.driver_name,
   isCoverDriver: a.is_cover_driver || false,
+  isExternalDriver: a.is_external_driver || false,
+  externalDriverName: a.external_driver_name || "",
+  isExternalPA: a.is_external_pa || false,
+  externalPAName: a.external_pa_name || "",
   paId: a.pa_id,
   paName: a.pa_name,
   isCoverPA: a.is_cover_pa || false,
   childrenAttendance: a.children_attendance || [],
   noRunReason: a.no_run_reason,
   notes: a.notes,
+
   createdAt: a.created_at,
 });
 
@@ -313,15 +334,29 @@ const attendanceToDb = (a, uid) => ({
   route_number: a.routeNumber,
   status: a.status || "ran",
   days_value: a.daysValue ?? 1,
+  is_split_run: a.isSplitRun || false,
+  am_driver_id: a.amDriverId || null,
+  am_driver_name: a.amDriverName || null,
+  pm_driver_id: a.pmDriverId || null,
+  pm_driver_name: a.pmDriverName || null,
+  am_pa_id: a.amPaId || null,
+  am_pa_name: a.amPaName || null,
+  pm_pa_id: a.pmPaId || null,
+  pm_pa_name: a.pmPaName || null,
   driver_id: a.driverId,
   driver_name: a.driverName,
   is_cover_driver: a.isCoverDriver || false,
+  is_external_driver: a.isExternalDriver || false,
+  external_driver_name: a.externalDriverName || null,
+  is_external_pa: a.isExternalPA || false,
+  external_pa_name: a.externalPAName || null,
   pa_id: a.paId,
   pa_name: a.paName,
   is_cover_pa: a.isCoverPA || false,
   children_attendance: a.childrenAttendance || [],
   no_run_reason: a.noRunReason,
   notes: a.notes,
+
   created_at: a.createdAt,
 });
 
@@ -429,8 +464,12 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   // ── Load all data on mount ─────────────────────────────────────────────────
+  const hasLoadedRef = useRef(false);
+
   useEffect(() => {
     if (!user) return;
+    if (hasLoadedRef.current) return; // prevent re-run on token refresh
+    hasLoadedRef.current = true;
     const uid = user.id;
 
     async function loadAll() {
@@ -568,7 +607,30 @@ export function AppProvider({ children }) {
 
   const setAttendance = async (data) => {
     setRawAttendance(data);
-    await syncTable("attendance", data, attendanceToDb, user.id);
+    if (data.length === 0) {
+      await supabase.from("attendance").delete().eq("user_id", user.id);
+      return;
+    }
+    const rows = data.map((a) => attendanceToDb(a, user.id));
+    const chunkSize = 50;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+      const chunk = rows.slice(i, i + chunkSize);
+      const { error } = await supabase
+        .from("attendance")
+        .upsert(chunk, { onConflict: "id" });
+      if (error) console.error("attendance upsert error:", error);
+    }
+  };
+
+  const deleteAttendanceRecords = async (ids) => {
+    if (!ids || ids.length === 0) return;
+    for (const id of ids) {
+      await supabase
+        .from("attendance")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
+    }
   };
 
   const setHolidays = async (data) => {
@@ -634,6 +696,7 @@ export function AppProvider({ children }) {
         setPupils,
         attendance,
         setAttendance,
+        deleteAttendanceRecords,
         holidays,
         setHolidays,
         settings,

@@ -22,10 +22,7 @@ const EMPTY = {
   regularStaffId: "",
   regularDays: "",
   regularRate: "",
-  tempStaffId: "",
-  tempStaffName: "",
-  tempDays: "",
-  tempRate: "",
+  coverEntries: [],
   absenceReason: "",
   notes: "",
 };
@@ -37,8 +34,14 @@ export default function Allocations() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
-  const [monthF, setMonthF] = useState(currentMonth());
-  const [yearF, setYearF] = useState(currentYear());
+  const [monthF, setMonthF] = useState(() => {
+    const s = localStorage.getItem("alloc_month");
+    return s !== null ? parseInt(s) : currentMonth();
+  });
+  const [yearF, setYearF] = useState(() => {
+    const s = localStorage.getItem("alloc_year");
+    return s !== null ? parseInt(s) : currentYear();
+  });
 
   const drivers = staff.filter(
     (s) => s.type === "driver" || s.type === "driver_pa",
@@ -106,22 +109,32 @@ export default function Allocations() {
       Object.values(split).reduce((s, v) => s + v.days, 0) ||
       "";
 
+    const regularRate = route?.driverDailyRate || 0;
+    const primaryId = route?.primaryDriverId;
+    const primaryEntry = primaryId
+      ? splitArr.find(([id]) => id === primaryId) || splitArr[0]
+      : splitArr[0];
+    const coverArr = splitArr.filter(([id]) => id !== primaryEntry?.[0]);
+    const coverEntries = coverArr.map(([id, data]) => {
+      const s = staff.find((x) => x.id === id);
+      return {
+        id: uid(),
+        staffId: id || "",
+        staffName: data.name || s?.name || "",
+        days: data.days,
+        rate: regularRate,
+        amount: Math.round(data.days * regularRate * 100) / 100,
+        isExternal: false,
+      };
+    });
     setForm((p) => ({
       ...p,
       routeId,
       totalDays,
-      regularRate: route?.driverDailyRate || "",
-      // Pre-fill regular staff from attendance if found
-      regularStaffId: primary
-        ? staff.find((s) => s.name === primary[1].name)?.id || p.regularStaffId
-        : p.regularStaffId,
-      regularDays: primary ? primary[1].days : "",
-      // Pre-fill temp cover if found
-      tempStaffId: cover
-        ? staff.find((s) => s.name === cover[1].name)?.id || ""
-        : "",
-      tempStaffName: cover ? cover[1].name : "",
-      tempDays: cover ? cover[1].days : "",
+      regularRate,
+      regularStaffId: primaryEntry ? primaryEntry[0] : p.regularStaffId,
+      regularDays: primaryEntry ? primaryEntry[1].days : "",
+      coverEntries,
     }));
   };
 
@@ -132,6 +145,22 @@ export default function Allocations() {
   };
 
   const openEdit = (a) => {
+    const coverEntries =
+      a.coverEntries?.length > 0
+        ? a.coverEntries
+        : a.tempStaffId || a.tempStaffName
+          ? [
+              {
+                id: uid(),
+                staffId: a.tempStaffId || "",
+                staffName: a.tempStaffName || "",
+                days: a.tempDays || 0,
+                rate: a.tempRate || 0,
+                amount: a.tempAmount || 0,
+                isExternal: false,
+              },
+            ]
+          : [];
     setForm({
       routeId: a.routeId,
       month: a.month,
@@ -140,10 +169,8 @@ export default function Allocations() {
       regularStaffId: a.regularStaffId,
       regularDays: a.regularDays,
       regularRate: a.regularRate,
-      tempStaffId: a.tempStaffId || "",
-      tempStaffName: a.tempStaffName || "",
-      tempDays: a.tempDays || "",
-      tempRate: a.tempRate || "",
+      coverEntries,
+      absenceReason: a.absenceReason || "",
       notes: a.notes || "",
     });
     setEditing(a);
@@ -160,10 +187,18 @@ export default function Allocations() {
     const route = getRoute(form.routeId);
     const regularDays = Number(form.regularDays) || 0;
     const regularRate = Number(form.regularRate) || 0;
-    const tempDays = Number(form.tempDays) || 0;
-    const tempRate = Number(form.tempRate) || 0;
     const regularAmount = Math.round(regularDays * regularRate * 100) / 100;
-    const tempAmount = Math.round(tempDays * tempRate * 100) / 100;
+    const coverEntries = (form.coverEntries || []).map((c) => ({
+      ...c,
+      days: Number(c.days) || 0,
+      rate: Number(c.rate) || 0,
+      amount:
+        Math.round((Number(c.days) || 0) * (Number(c.rate) || 0) * 100) / 100,
+    }));
+    const first = coverEntries[0];
+    const tempDays = first ? Number(first.days) || 0 : 0;
+    const tempRate = first ? Number(first.rate) || 0 : 0;
+    const tempAmount = first ? Number(first.amount) || 0 : 0;
 
     const record = {
       id: editing?.id || uid(),
@@ -177,11 +212,12 @@ export default function Allocations() {
       regularDays,
       regularRate,
       regularAmount,
-      tempStaffId: form.tempStaffId || null,
-      tempStaffName: form.tempStaffName || "",
+      tempStaffId: first?.staffId || null,
+      tempStaffName: first?.staffName || "",
       tempDays,
       tempRate,
       tempAmount,
+      coverEntries,
       absenceReason: form.absenceReason || "",
       notes: form.notes || "",
       createdAt: editing?.createdAt || Date.now(),
@@ -208,7 +244,13 @@ export default function Allocations() {
   // Month totals
   const totalRegular = filtered.reduce((s, a) => s + (a.regularAmount || 0), 0);
   const totalTemp = filtered.reduce((s, a) => s + (a.tempAmount || 0), 0);
-  const totalOwed = totalRegular + totalTemp;
+  const totalOwed = filtered.reduce((s, a) => {
+    const coverTotal =
+      a.coverEntries?.length > 0
+        ? a.coverEntries.reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
+        : Number(a.tempAmount) || 0;
+    return s + (Number(a.regularAmount) || 0) + coverTotal;
+  }, 0);
 
   // Days check — warn if allocation days don't match invoice days
   const getDaysWarning = (a) => {
@@ -219,7 +261,11 @@ export default function Allocations() {
         x.year === a.year,
     );
     if (!inv) return null;
-    const allocTotal = (a.regularDays || 0) + (a.tempDays || 0);
+    const coverTotal =
+      a.coverEntries?.length > 0
+        ? a.coverEntries.reduce((s, c) => s + (Number(c.days) || 0), 0)
+        : Number(a.tempDays) || 0;
+    const allocTotal = (Number(a.regularDays) || 0) + coverTotal;
     if (allocTotal !== a.totalDays)
       return `Days split (${allocTotal}) doesn't match total (${a.totalDays})`;
     if (inv.daysWorked && Number(inv.daysWorked) !== a.totalDays)
@@ -244,7 +290,11 @@ export default function Allocations() {
         <select
           className="input w-36"
           value={monthF}
-          onChange={(e) => setMonthF(Number(e.target.value))}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            setMonthF(v);
+            localStorage.setItem("alloc_month", v);
+          }}
         >
           {MONTHS.map((m, i) => (
             <option key={i} value={i}>
@@ -255,7 +305,11 @@ export default function Allocations() {
         <select
           className="input w-24"
           value={yearF}
-          onChange={(e) => setYearF(Number(e.target.value))}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            setYearF(v);
+            localStorage.setItem("alloc_year", v);
+          }}
         >
           {YEARS.map((y) => (
             <option key={y} value={y}>
@@ -310,10 +364,9 @@ export default function Allocations() {
                   <th className="th-r">Days</th>
                   <th className="th-r">Rate</th>
                   <th className="th-r">Owed</th>
-                  <th className="th">Temp cover</th>
-                  <th className="th-r">Days</th>
-                  <th className="th-r">Rate</th>
-                  <th className="th-r">Owed</th>
+                  <th className="th" colSpan={3}>
+                    Cover drivers
+                  </th>
                   <th className="th-r">Total owed</th>
                   <th className="th"></th>
                 </tr>
@@ -354,26 +407,56 @@ export default function Allocations() {
                       <td className="td-r font-medium text-gray-900 dark:text-gray-100">
                         {fmt(a.regularAmount)}
                       </td>
-                      <td className="td">
-                        {a.tempDays > 0 ? (
-                          <p className="text-sm text-gray-700 dark:text-gray-300">
-                            {a.tempStaffName || getStaffName(a.tempStaffId)}
-                          </p>
-                        ) : (
-                          <span className="muted">—</span>
-                        )}
-                      </td>
-                      <td className="td-r text-gray-500 dark:text-gray-400">
-                        {a.tempDays > 0 ? a.tempDays : "—"}
-                      </td>
-                      <td className="td-r text-gray-500 dark:text-gray-400">
-                        {a.tempDays > 0 ? fmt(a.tempRate) : "—"}
-                      </td>
-                      <td className="td-r text-gray-700 dark:text-gray-300">
-                        {a.tempDays > 0 ? fmt(a.tempAmount) : "—"}
+                      <td className="td" colSpan={3}>
+                        {(() => {
+                          const entries =
+                            a.coverEntries?.length > 0
+                              ? a.coverEntries
+                              : a.tempDays > 0
+                                ? [
+                                    {
+                                      staffId: a.tempStaffId,
+                                      staffName: a.tempStaffName,
+                                      days: a.tempDays,
+                                      rate: a.tempRate,
+                                      amount: a.tempAmount,
+                                    },
+                                  ]
+                                : [];
+                          if (entries.length === 0)
+                            return <span className="muted">—</span>;
+                          return (
+                            <div className="space-y-1">
+                              {entries.map((c, i) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center gap-2 text-xs"
+                                >
+                                  <span className="text-gray-700 dark:text-gray-300 font-medium min-w-0 truncate">
+                                    {c.staffName || getStaffName(c.staffId)}
+                                  </span>
+                                  <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">
+                                    {c.days}d × {fmt(c.rate)}
+                                  </span>
+                                  <span className="text-gray-700 dark:text-gray-300 font-medium flex-shrink-0">
+                                    {fmt(c.amount)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="td-r font-semibold text-green-700 dark:text-green-400">
-                        {fmt((a.regularAmount || 0) + (a.tempAmount || 0))}
+                        {fmt(
+                          (Number(a.regularAmount) || 0) +
+                            (a.coverEntries?.length > 0
+                              ? a.coverEntries.reduce(
+                                  (s, c) => s + (Number(c.amount) || 0),
+                                  0,
+                                )
+                              : Number(a.tempAmount) || 0),
+                        )}
                       </td>
                       <td className="td">
                         <div className="flex gap-1">
@@ -405,7 +488,6 @@ export default function Allocations() {
                   </td>
                   <td className="td-r font-semibold">{fmt(totalRegular)}</td>
                   <td colSpan={3} />
-                  <td className="td-r font-semibold">{fmt(totalTemp)}</td>
                   <td className="td-r font-bold text-green-700 dark:text-green-400">
                     {fmt(totalOwed)}
                   </td>
@@ -574,64 +656,203 @@ export default function Allocations() {
                 )}
             </div>
 
-            {/* Temp cover */}
-            <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
-              <p className="label mb-3">
-                Temp cover{" "}
-                <span className="text-gray-400 dark:text-gray-500 normal-case font-normal">
-                  (optional)
-                </span>
-              </p>
-              {/* <FormGrid cols={2}> */}
-              <FormField label="Cover staff member">
-                <select
-                  className="input"
-                  value={form.tempStaffId}
-                  onChange={(e) => {
-                    const s = staff.find((x) => x.id === e.target.value);
+            {/* Cover drivers — multiple */}
+            <div className="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="label">
+                  Cover drivers{" "}
+                  <span className="text-gray-400 dark:text-gray-500 normal-case font-normal">
+                    (optional)
+                  </span>
+                </p>
+                <button
+                  type="button"
+                  className="btn-ghost text-xs"
+                  onClick={() =>
                     setForm((p) => ({
                       ...p,
-                      tempStaffId: e.target.value,
-                      tempStaffName: s?.name || "",
-                    }));
-                  }}
+                      coverEntries: [
+                        ...(p.coverEntries || []),
+                        {
+                          id: uid(),
+                          staffId: "",
+                          staffName: "",
+                          days: "",
+                          rate: p.regularRate || "",
+                          amount: 0,
+                          isExternal: false,
+                        },
+                      ],
+                    }))
+                  }
                 >
-                  <option value="">Select staff member…</option>
-                  {staff.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-              {/* </FormGrid> */}
-              <FormGrid cols={2}>
-                <FormField label="Days covered">
-                  <input
-                    className="input"
-                    type="number"
-                    min="0"
-                    value={form.tempDays}
-                    onChange={f("tempDays")}
-                    placeholder="0"
-                  />
-                </FormField>
-                <FormField label="Rate (£/day)">
-                  <input
-                    className="input"
-                    type="number"
-                    step="0.01"
-                    value={form.tempRate}
-                    onChange={f("tempRate")}
-                    placeholder="75.00"
-                  />
-                </FormField>
-              </FormGrid>
-              {form.tempDays && form.tempRate && (
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                  Temp owed:{" "}
+                  + Add cover driver
+                </button>
+              </div>
+              {(form.coverEntries || []).length === 0 && (
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  No cover drivers — click "+ Add cover driver" to add one.
+                </p>
+              )}
+              {(form.coverEntries || []).map((c, i) => (
+                <div
+                  key={c.id}
+                  className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                      Cover driver {i + 1}
+                    </p>
+                    <button
+                      type="button"
+                      className="text-xs text-red-500 hover:text-red-700"
+                      onClick={() =>
+                        setForm((p) => ({
+                          ...p,
+                          coverEntries: p.coverEntries.filter(
+                            (_, j) => j !== i,
+                          ),
+                        }))
+                      }
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <FormField label="Staff member">
+                    {c.isExternal ? (
+                      <input
+                        className="input text-sm"
+                        value={c.staffName}
+                        onChange={(e) =>
+                          setForm((p) => ({
+                            ...p,
+                            coverEntries: p.coverEntries.map((x, j) =>
+                              j === i ? { ...x, staffName: e.target.value } : x,
+                            ),
+                          }))
+                        }
+                        placeholder="External driver name…"
+                      />
+                    ) : (
+                      <select
+                        className="input text-sm"
+                        value={c.staffId}
+                        onChange={(e) => {
+                          const s = staff.find((x) => x.id === e.target.value);
+                          setForm((p) => ({
+                            ...p,
+                            coverEntries: p.coverEntries.map((x, j) =>
+                              j === i
+                                ? {
+                                    ...x,
+                                    staffId: e.target.value,
+                                    staffName: s?.name || "",
+                                  }
+                                : x,
+                            ),
+                          }));
+                        }}
+                      >
+                        <option value="">Select staff…</option>
+                        {staff.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <label className="flex items-center gap-1.5 mt-1 text-xs text-gray-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={c.isExternal || false}
+                        onChange={(e) =>
+                          setForm((p) => ({
+                            ...p,
+                            coverEntries: p.coverEntries.map((x, j) =>
+                              j === i
+                                ? {
+                                    ...x,
+                                    isExternal: e.target.checked,
+                                    staffId: "",
+                                    staffName: "",
+                                  }
+                                : x,
+                            ),
+                          }))
+                        }
+                        className="w-3 h-3 rounded"
+                      />
+                      External / temp (not in staff list)
+                    </label>
+                  </FormField>
+                  <FormGrid cols={2}>
+                    <FormField label="Days covered">
+                      <input
+                        className="input text-sm"
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={c.days}
+                        onChange={(e) => {
+                          const days = e.target.value;
+                          const amount =
+                            Math.round(
+                              (Number(days) || 0) * (Number(c.rate) || 0) * 100,
+                            ) / 100;
+                          setForm((p) => ({
+                            ...p,
+                            coverEntries: p.coverEntries.map((x, j) =>
+                              j === i ? { ...x, days, amount } : x,
+                            ),
+                          }));
+                        }}
+                        placeholder="0"
+                      />
+                    </FormField>
+                    <FormField label="Rate (£/day)">
+                      <input
+                        className="input text-sm"
+                        type="number"
+                        step="0.01"
+                        value={c.rate}
+                        onChange={(e) => {
+                          const rate = e.target.value;
+                          const amount =
+                            Math.round(
+                              (Number(c.days) || 0) * (Number(rate) || 0) * 100,
+                            ) / 100;
+                          setForm((p) => ({
+                            ...p,
+                            coverEntries: p.coverEntries.map((x, j) =>
+                              j === i ? { ...x, rate, amount } : x,
+                            ),
+                          }));
+                        }}
+                        placeholder="90.00"
+                      />
+                    </FormField>
+                  </FormGrid>
+                  {c.days && c.rate && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Owed:{" "}
+                      <span className="font-semibold text-gray-900 dark:text-gray-100">
+                        {fmt(Number(c.days) * Number(c.rate))}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              ))}
+              {(form.coverEntries || []).length > 0 && (
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Total cover owed:{" "}
                   <span className="font-semibold text-gray-900 dark:text-gray-100">
-                    {fmt(Number(form.tempDays) * Number(form.tempRate))}
+                    {fmt(
+                      (form.coverEntries || []).reduce(
+                        (s, c) =>
+                          s + (Number(c.days) || 0) * (Number(c.rate) || 0),
+                        0,
+                      ),
+                    )}
                   </span>
                 </p>
               )}
@@ -639,16 +860,19 @@ export default function Allocations() {
 
             {/* Days validation */}
             {form.totalDays &&
-              Number(form.regularDays) + Number(form.tempDays || 0) > 0 &&
+              Number(form.regularDays) > 0 &&
               (() => {
-                const split =
-                  Number(form.regularDays) + Number(form.tempDays || 0);
+                const coverTotal = (form.coverEntries || []).reduce(
+                  (s, c) => s + (Number(c.days) || 0),
+                  0,
+                );
+                const split = Number(form.regularDays) + coverTotal;
                 const total = Number(form.totalDays);
                 if (split !== total)
                   return (
                     <div className="alert-warn text-sm text-amber-700 dark:text-amber-400">
-                      ⚠ Days split ({split}) doesn't match total days ({total}).
-                      Regular + temp days should equal total days invoiced.
+                      ⚠ Days split ({split}) doesn't match total ({total}).
+                      Regular + all cover days should equal total days invoiced.
                     </div>
                   );
                 return (
