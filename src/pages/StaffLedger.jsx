@@ -31,15 +31,16 @@ export default function StaffLedger() {
 
   // ── Per-staff summary ──────────────────────────────────────────────────────
   const summaries = staff.map((s) => {
-    const earned = allocations
-      .filter((a) => a.regularStaffId === s.id)
-      .reduce((sum, a) => sum + (a.regularAmount || 0), 0);
-
-    const tempEarned = allocations
-      .filter((a) => a.tempStaffId === s.id)
-      .reduce((sum, a) => sum + (a.tempAmount || 0), 0);
-
-    const totalEarned = earned + tempEarned;
+    const totalEarned = allocations.reduce((sum, a) => {
+      if (a.regularStaffId === s.id) return sum + (a.regularAmount || 0);
+      if (a.coverEntries?.length > 0) {
+        const entry = a.coverEntries.find((c) => c.staffId === s.id);
+        if (entry) return sum + (Number(entry.amount) || 0);
+      } else if (a.tempStaffId === s.id) {
+        return sum + (a.tempAmount || 0);
+      }
+      return sum;
+    }, 0);
     const totalPaid = payments
       .filter((p) => p.staffId === s.id)
       .reduce((sum, p) => sum + p.amount, 0);
@@ -54,26 +55,54 @@ export default function StaffLedger() {
     const s = staff.find((x) => x.id === staffId);
     if (!s) return [];
 
-    // Earnings from allocations (regular)
-    const earnLines = allocations
-      .filter((a) => a.regularStaffId === staffId || a.tempStaffId === staffId)
-      .map((a) => {
-        const isTemp = a.tempStaffId === staffId;
-        const amount = isTemp ? a.tempAmount : a.regularAmount;
-        const days = isTemp ? a.tempDays : a.regularDays;
-        const rate = isTemp ? a.tempRate : a.regularRate;
-        return {
-          id: a.id,
+    // Earnings from allocations — handles regular + multiple cover entries
+    const earnLines = [];
+    allocations.forEach((a) => {
+      // Regular entry
+      if (a.regularStaffId === staffId) {
+        earnLines.push({
+          id: a.id + "_reg",
           type: "earning",
           date: `${a.year}-${String(a.month + 1).padStart(2, "0")}-01`,
           month: a.month,
           year: a.year,
           label: `Route ${a.routeNumber} — ${a.routeName}`,
-          detail: `${days} days × ${fmt(rate)}${isTemp ? " (temp cover)" : ""}`,
-          amount,
+          detail: `${a.regularDays} days × ${fmt(a.regularRate)}`,
+          amount: a.regularAmount || 0,
           sign: 1,
-        };
-      });
+        });
+      }
+      // Cover entries — use coverEntries array if available, fall back to legacy tempStaffId
+      if (a.coverEntries?.length > 0) {
+        a.coverEntries.forEach((c, i) => {
+          if (c.staffId === staffId) {
+            earnLines.push({
+              id: a.id + "_cover_" + i,
+              type: "earning",
+              date: `${a.year}-${String(a.month + 1).padStart(2, "0")}-01`,
+              month: a.month,
+              year: a.year,
+              label: `Route ${a.routeNumber} — ${a.routeName}`,
+              detail: `${c.days} days × ${fmt(c.rate)} (cover)`,
+              amount: Number(c.amount) || 0,
+              sign: 1,
+            });
+          }
+        });
+      } else if (a.tempStaffId === staffId) {
+        earnLines.push({
+          id: a.id + "_temp",
+          type: "earning",
+          date: `${a.year}-${String(a.month + 1).padStart(2, "0")}-01`,
+          month: a.month,
+          year: a.year,
+          label: `Route ${a.routeNumber} — ${a.routeName}`,
+          detail: `${a.tempDays} days × ${fmt(a.tempRate)} (cover)`,
+          amount: a.tempAmount || 0,
+          sign: 1,
+        });
+      }
+    });
 
     // Payments made
     const payLines = payments

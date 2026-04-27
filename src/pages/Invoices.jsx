@@ -331,11 +331,7 @@ export default function Invoices() {
                 routes
                   .filter((r) => r.active && !r.suspended)
                   .forEach((r) => {
-                    const days = getAttendanceDays(
-                      r.id,
-                      currentMonth(),
-                      currentYear(),
-                    );
+                    const days = getAttendanceDays(r.id, genMonth, genYear);
                     if (days > 0) preFilled[r.id] = String(days);
                   });
                 setGenDays(preFilled);

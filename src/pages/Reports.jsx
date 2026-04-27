@@ -92,15 +92,27 @@ function exportInvoices(invoices, year) {
 
 function exportStaffPayments(payments, staff, year) {
   const pays = payments.filter((p) => p.year === year);
-  const getName = (id) => staff.find((s) => s.id === id)?.name || "Unknown";
-  const header = ["Staff", "Date", "For Month", "Type", "Reference", "Amount"];
+  const getName = (p) =>
+    p.isExternal
+      ? p.externalName || "External"
+      : staff.find((s) => s.id === p.staffId)?.name || "Unknown";
+  const header = [
+    "Staff",
+    "Date",
+    "For Month",
+    "Type",
+    "Reference",
+    "Amount",
+    "External",
+  ];
   const rows = pays.map((p) => [
-    getName(p.staffId),
+    getName(p),
     p.date,
     `${MONTHS_SHORT[p.month]} ${p.year}`,
     p.type,
     p.reference || "",
     p.amount.toFixed(2),
+    p.isExternal ? "Yes" : "No",
   ]);
   downloadCSV(`crown-cars-staff-payments-${year}.csv`, [header, ...rows]);
 }
@@ -174,9 +186,16 @@ export default function Reports() {
       const netInv = inv.reduce((s, x) => s + (x.netTotal || 0), 0);
       const totalDays = inv.reduce((s, x) => s + (x.daysWorked || 0), 0);
 
-      // Staff cost from allocations (actual cost not payment timing)
+      // Staff cost from allocations — uses coverEntries for multiple cover drivers
       const regularCost = alloc.reduce((s, a) => s + (a.regularAmount || 0), 0);
-      const tempCost = alloc.reduce((s, a) => s + (a.tempAmount || 0), 0);
+      const tempCost = alloc.reduce((s, a) => {
+        if (a.coverEntries?.length > 0)
+          return (
+            s +
+            a.coverEntries.reduce((cs, c) => cs + (Number(c.amount) || 0), 0)
+          );
+        return s + (a.tempAmount || 0);
+      }, 0);
       const totalStaffCost = regularCost + tempCost;
 
       // True profit = net received (ex-VAT) minus actual staff cost
@@ -212,6 +231,19 @@ export default function Reports() {
         .length,
     }))
     .sort((a, b) => b.total - a.total);
+
+  // External/one-off payments grouped by name
+  const externalReport = Object.values(
+    payments
+      .filter((p) => p.isExternal && p.year === year && p.externalName)
+      .reduce((acc, p) => {
+        const key = p.externalName;
+        if (!acc[key]) acc[key] = { name: key, total: 0, count: 0 };
+        acc[key].total += p.amount;
+        acc[key].count += 1;
+        return acc;
+      }, {}),
+  ).sort((a, b) => b.total - a.total);
 
   // VAT by quarter
   const quarters = [
@@ -546,7 +578,8 @@ export default function Reports() {
         </div>
 
         {/* Staff breakdown */}
-        {staffReport.filter((s) => s.total > 0).length > 0 && (
+        {(staffReport.filter((s) => s.total > 0).length > 0 ||
+          externalReport.length > 0) && (
           <div className="card overflow-hidden">
             <div className="card-section flex items-center justify-between">
               <h3 className="section-title">Staff cost breakdown — {year}</h3>
@@ -592,6 +625,29 @@ export default function Reports() {
                       </td>
                     </tr>
                   ))}
+                {externalReport.map((e) => (
+                  <tr key={e.name} className="tr">
+                    <td className="td">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-6 h-6 avatar text-xs">
+                          {e.name[0]}
+                        </div>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">
+                          {e.name}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="td text-xs">
+                      <span className="chip-amber">External</span>
+                    </td>
+                    <td className="td-r text-gray-600 dark:text-gray-400">
+                      {e.count}
+                    </td>
+                    <td className="td-r font-semibold text-gray-900 dark:text-gray-100">
+                      {fmt(e.total)}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

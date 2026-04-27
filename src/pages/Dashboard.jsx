@@ -256,19 +256,19 @@ export default function Dashboard() {
             ) : (
               <div className="divide-y divide-gray-100 dark:divide-gray-700 overflow-y-auto flex-1">
                 {staff.map((s) => {
-                  const earned = allocations
-                    .filter(
-                      (a) =>
-                        a.regularStaffId === s.id || a.tempStaffId === s.id,
-                    )
-                    .reduce(
-                      (sum, a) =>
-                        sum +
-                        (a.regularStaffId === s.id
-                          ? a.regularAmount || 0
-                          : a.tempAmount || 0),
-                      0,
-                    );
+                  const earned = allocations.reduce((sum, a) => {
+                    if (a.regularStaffId === s.id)
+                      return sum + (a.regularAmount || 0);
+                    if (a.coverEntries?.length > 0) {
+                      const entry = a.coverEntries.find(
+                        (c) => c.staffId === s.id,
+                      );
+                      if (entry) return sum + (Number(entry.amount) || 0);
+                    } else if (a.tempStaffId === s.id) {
+                      return sum + (a.tempAmount || 0);
+                    }
+                    return sum;
+                  }, 0);
                   const paid = payments
                     .filter((p) => p.staffId === s.id)
                     .reduce((sum, p) => sum + p.amount, 0);
@@ -349,7 +349,6 @@ export default function Dashboard() {
               <div className="divide-y divide-gray-100 dark:divide-gray-700">
                 {routes
                   .filter((r) => r.active)
-                  .slice(0, 5)
                   .map((r) => {
                     const driver = staff.find(
                       (s) => s.id === r.primaryDriverId,
@@ -427,7 +426,7 @@ export default function Dashboard() {
               </p>
             ) : (
               <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                {mi.slice(0, 5).map((inv) => (
+                {mi.map((inv) => (
                   <div
                     key={inv.id}
                     className="flex items-center justify-between py-3"
@@ -490,10 +489,16 @@ export default function Dashboard() {
             const monthAllocs = allocations.filter(
               (a) => a.month === month && a.year === year,
             );
-            const totalOwedStaff = monthAllocs.reduce(
-              (s, a) => s + (a.regularAmount || 0) + (a.tempAmount || 0),
-              0,
-            );
+            const totalOwedStaff = monthAllocs.reduce((s, a) => {
+              const coverTotal =
+                a.coverEntries?.length > 0
+                  ? a.coverEntries.reduce(
+                      (cs, c) => cs + (Number(c.amount) || 0),
+                      0,
+                    )
+                  : Number(a.tempAmount) || 0;
+              return s + (Number(a.regularAmount) || 0) + coverTotal;
+            }, 0);
 
             // Staff already paid this month
             const alreadyPaidStaff = payments

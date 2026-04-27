@@ -82,8 +82,14 @@ const EMPTY = {
 export default function HolidayCalendar() {
   const { holidays, setHolidays, routes } = useApp();
 
-  const [month, setMonth] = useState(currentMonth());
-  const [year, setYear] = useState(currentYear());
+  const [month, setMonth] = useState(() => {
+    const s = localStorage.getItem("hol_month");
+    return s !== null ? parseInt(s) : currentMonth();
+  });
+  const [year, setYear] = useState(() => {
+    const s = localStorage.getItem("hol_year");
+    return s !== null ? parseInt(s) : currentYear();
+  });
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
@@ -202,7 +208,11 @@ export default function HolidayCalendar() {
             <select
               className="input w-36"
               value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setMonth(v);
+                localStorage.setItem("hol_month", v);
+              }}
             >
               {MONTHS.map((m, i) => (
                 <option key={i} value={i}>
@@ -213,7 +223,11 @@ export default function HolidayCalendar() {
             <select
               className="input w-24"
               value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setYear(v);
+                localStorage.setItem("hol_year", v);
+              }}
             >
               {YEARS.map((y) => (
                 <option key={y} value={y}>

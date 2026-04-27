@@ -122,7 +122,14 @@ export async function parseRemittancePDF(file) {
   let paymentDate = new Date().toISOString().split("T")[0];
   if (dm?.[1]) {
     const [d, mo, y] = dm[1].split("/");
-    const dt = new Date(parseInt(y), parseInt(mo) - 1, parseInt(d) + 2);
+    const dt = new Date(parseInt(y), parseInt(mo) - 1, parseInt(d));
+    // Add 2 bank working days — skip weekends
+    let daysAdded = 0;
+    while (daysAdded < 2) {
+      dt.setDate(dt.getDate() + 1);
+      const dow = dt.getDay();
+      if (dow !== 0 && dow !== 6) daysAdded++; // skip Sat(6) and Sun(0)
+    }
     paymentDate = dt.toISOString().split("T")[0];
   }
 

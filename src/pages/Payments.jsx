@@ -37,22 +37,46 @@ const EMPTY = {
 export default function Payments() {
   const { payments, setPayments, staff, allocations } = useApp();
   const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [staffF, setStaffF] = useState("all");
   const [monthF, setMonthF] = useState("all");
-  const [yearF, setYearF] = useState(String(currentYear()));
+  const [yearF, setYearF] = useState(
+    () => localStorage.getItem("pay_yearF") || String(currentYear()),
+  );
 
   const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const open = () => {
     setForm(EMPTY);
+    setEditing(null);
     setShowModal(true);
   };
-  const close = () => setShowModal(false);
+  const edit = (p) => {
+    setForm({
+      staffId: p.staffId || "",
+      amount: p.amount,
+      date: p.date,
+      type: p.type,
+      month: p.month,
+      year: p.year,
+      reference: p.reference || "",
+      notes: p.notes || "",
+      allocationIds: p.allocationIds || [],
+      isExternal: p.isExternal || false,
+      externalName: p.externalName || "",
+    });
+    setEditing(p);
+    setShowModal(true);
+  };
+  const close = () => {
+    setShowModal(false);
+    setEditing(null);
+  };
 
   const save = () => {
     if ((!form.staffId && !form.externalName) || !form.amount) return;
     const record = {
-      id: uid(),
+      id: editing?.id || uid(),
       ...form,
       amount: parseFloat(form.amount),
       month: parseInt(form.month),
@@ -60,13 +84,21 @@ export default function Payments() {
       allocationIds: form.allocationIds || [],
       periodMonth: parseInt(form.month),
       periodYear: parseInt(form.year),
-      createdAt: Date.now(),
+      createdAt: editing?.createdAt || Date.now(),
     };
-    setPayments([...payments, record], {
-      action: "create",
-      id: record.id,
-      label: `Payment to ${form.isExternal ? form.externalName : staff.find((s) => s.id === form.staffId)?.name} — ${fmt(record.amount)}`,
-    });
+    const name = form.isExternal
+      ? form.externalName
+      : staff.find((s) => s.id === form.staffId)?.name;
+    setPayments(
+      editing
+        ? payments.map((x) => (x.id === editing.id ? record : x))
+        : [...payments, record],
+      {
+        action: editing ? "update" : "create",
+        id: record.id,
+        label: `Payment to ${name} — ${fmt(record.amount)}`,
+      },
+    );
     close();
   };
 
@@ -145,7 +177,10 @@ export default function Payments() {
         <select
           className="input w-28"
           value={yearF}
-          onChange={(e) => setYearF(e.target.value)}
+          onChange={(e) => {
+            setYearF(e.target.value);
+            localStorage.setItem("pay_yearF", e.target.value);
+          }}
         >
           <option value="all">All years</option>
           {YEARS.map((y) => (
@@ -257,12 +292,17 @@ export default function Payments() {
                       {fmt(p.amount)}
                     </td>
                     <td className="td">
-                      <button
-                        className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                        onClick={() => del(p.id)}
-                      >
-                        Del
-                      </button>
+                      <div className="flex gap-1">
+                        <button className="btn-ghost" onClick={() => edit(p)}>
+                          Edit
+                        </button>
+                        <button
+                          className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          onClick={() => del(p.id)}
+                        >
+                          Del
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -273,7 +313,10 @@ export default function Payments() {
       </div>
 
       {showModal && (
-        <Modal title="Log staff payment" onClose={close}>
+        <Modal
+          title={editing ? "Edit payment" : "Log staff payment"}
+          onClose={close}
+        >
           <div className="space-y-4">
             <FormField label="Staff member *">
               {form.isExternal ? (

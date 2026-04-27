@@ -144,6 +144,8 @@ const paymentFromDb = (p) => ({
   allocationIds: p.allocation_ids || [],
   periodMonth: p.period_month ?? null,
   periodYear: p.period_year ?? null,
+  isExternal: p.is_external || false,
+  externalName: p.external_name || "",
   createdAt: p.created_at,
 });
 const paymentToDb = (p, uid) => ({
@@ -160,6 +162,8 @@ const paymentToDb = (p, uid) => ({
   allocation_ids: p.allocationIds || [],
   period_month: p.periodMonth ?? null,
   period_year: p.periodYear ?? null,
+  is_external: p.isExternal || false,
+  external_name: p.externalName || null,
   created_at: p.createdAt,
 });
 

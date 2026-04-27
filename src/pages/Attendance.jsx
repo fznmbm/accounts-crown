@@ -1060,13 +1060,111 @@ export default function Attendance() {
                           return (
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
                               {unrecorded > 0 && (
-                                <button
-                                  onClick={() => bulkFillDay(day)}
-                                  title={`Fill ${unrecorded} unrecorded routes`}
-                                  className="text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded font-semibold hover:bg-green-200 dark:hover:bg-green-900/50"
-                                >
-                                  +{unrecorded}
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => bulkFillDay(day)}
+                                    title={`Fill ${unrecorded} unrecorded routes`}
+                                    className="text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded font-semibold hover:bg-green-200 dark:hover:bg-green-900/50"
+                                  >
+                                    +{unrecorded}
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const reasons = [
+                                        {
+                                          value: "inset_day",
+                                          label: "INSET day",
+                                        },
+                                        {
+                                          value: "bank_holiday",
+                                          label: "Bank holiday",
+                                        },
+                                        {
+                                          value: "school_holiday",
+                                          label: "School holiday",
+                                        },
+                                        {
+                                          value: "all_children_absent",
+                                          label: "All children absent",
+                                        },
+                                        {
+                                          value: "vehicle_issue",
+                                          label: "Vehicle issue",
+                                        },
+                                        {
+                                          value: "driver_absent",
+                                          label: "Driver absent",
+                                        },
+                                        {
+                                          value: "non_operational",
+                                          label: "Non-operational",
+                                        },
+                                        { value: "other", label: "Other" },
+                                      ];
+                                      const chosen = window.prompt(
+                                        `Mark all ${unrecorded} unrecorded routes as NO RUN for ${fmtDate(day)}?\n\nEnter reason number:\n` +
+                                          reasons
+                                            .map(
+                                              (r, i) => `${i + 1}. ${r.label}`,
+                                            )
+                                            .join("\n"),
+                                      );
+                                      if (!chosen) return;
+                                      const idx = parseInt(chosen) - 1;
+                                      const reason = reasons[idx];
+                                      if (!reason) return;
+                                      const dateStr = dateKey(day);
+                                      const newRecords = [];
+                                      activeRoutes.forEach((r) => {
+                                        if (getAtt(day, r.id)) return;
+                                        if (isHoliday(day, r.id)) return;
+                                        if (isNonOperational(day, r.id)) return;
+                                        newRecords.push({
+                                          id: uid(),
+                                          month,
+                                          year,
+                                          date: dateStr,
+                                          routeId: r.id,
+                                          routeNumber: r.number,
+                                          status: "no_run",
+                                          daysValue: 0,
+                                          driverId: "",
+                                          driverName: "",
+                                          isCoverDriver: false,
+                                          isSplitRun: false,
+                                          isExternalDriver: false,
+                                          externalDriverName: "",
+                                          isExternalPA: false,
+                                          externalPAName: "",
+                                          amDriverId: null,
+                                          amDriverName: null,
+                                          pmDriverId: null,
+                                          pmDriverName: null,
+                                          amPaId: null,
+                                          amPaName: null,
+                                          pmPaId: null,
+                                          pmPaName: null,
+                                          paId: "",
+                                          paName: "",
+                                          isCoverPA: false,
+                                          childrenAttendance: [],
+                                          noRunReason: reason.value,
+                                          notes: "",
+                                          createdAt: Date.now(),
+                                        });
+                                      });
+                                      if (newRecords.length > 0)
+                                        setAttendance([
+                                          ...attendance,
+                                          ...newRecords,
+                                        ]);
+                                    }}
+                                    title={`Mark all unrecorded routes as No Run`}
+                                    className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded font-semibold hover:bg-red-200 dark:hover:bg-red-900/50"
+                                  >
+                                    ✕{unrecorded}
+                                  </button>
+                                </>
                               )}
                               {recorded > 0 && (
                                 <button
