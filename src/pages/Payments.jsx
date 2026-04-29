@@ -119,6 +119,7 @@ export default function Payments() {
 
   const filtered = payments
     .filter((p) => {
+      if (staffF === "external") return p.isExternal === true;
       if (staffF !== "all" && p.staffId !== staffF) return false;
       if (monthF !== "all" && p.month !== parseInt(monthF)) return false;
       if (yearF !== "all" && p.year !== parseInt(yearF)) return false;
@@ -156,6 +157,7 @@ export default function Payments() {
           onChange={(e) => setStaffF(e.target.value)}
         >
           <option value="all">All staff</option>
+          <option value="external">External / one-off only</option>
           {staff.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}

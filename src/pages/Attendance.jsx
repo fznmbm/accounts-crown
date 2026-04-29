@@ -247,6 +247,18 @@ export default function Attendance() {
       amDriverName: existing?.amDriverName || primaryDriver?.name || "",
       pmDriverId: existing?.pmDriverId || "",
       pmDriverName: existing?.pmDriverName || "",
+      isExternalAmDriver:
+        existing?.isSplitRun &&
+        !existing?.amDriverId &&
+        !!existing?.amDriverName
+          ? true
+          : false,
+      isExternalPmDriver:
+        existing?.isSplitRun &&
+        !existing?.pmDriverId &&
+        !!existing?.pmDriverName
+          ? true
+          : false,
       amPaId: existing?.amPaId || route.primaryPAId || "",
       amPaName: existing?.amPaName || primaryPA?.name || "",
       pmPaId: existing?.pmPaId || "",
@@ -575,38 +587,48 @@ export default function Attendance() {
         return;
       }
 
-      // Total days
-      const totalDays = records.reduce((s, a) => s + (a.daysValue ?? 1), 0);
+      // Filter out non-operational day records (stale data from before operational days were set)
+      const opDays = route.operationalDays || [1, 2, 3, 4, 5];
+      const opRecords = records.filter((a) => {
+        const dow = new Date(a.date).getDay();
+        return opDays.includes(dow);
+      });
+
+      // Total days — only operational days
+      const totalDays = opRecords.reduce((s, a) => s + (a.daysValue ?? 1), 0);
 
       // Group days by driver
       const driverDays = {};
-      records.forEach((a) => {
+      opRecords.forEach((a) => {
         // For half days, split between AM and PM drivers
         // Split run — full day but split 0.5 each between AM and PM drivers
         if (a.isSplitRun) {
-          const amKey = a.amDriverId || null;
-          const pmKey = a.pmDriverId || null;
+          // Use name as fallback key for external drivers (no driverId)
+          const amKey = a.amDriverId || a.amDriverName || null;
+          const pmKey = a.pmDriverId || a.pmDriverName || null;
           if (amKey) {
             if (!driverDays[amKey])
               driverDays[amKey] = {
-                driverId: a.amDriverId,
+                driverId: a.amDriverId || "",
                 name: a.amDriverName || "",
                 days: 0,
                 isCover: false,
+                isExternal: !a.amDriverId,
               };
             driverDays[amKey].days += 0.5;
           }
           if (pmKey && pmKey !== amKey) {
             if (!driverDays[pmKey])
               driverDays[pmKey] = {
-                driverId: a.pmDriverId,
+                driverId: a.pmDriverId || "",
                 name: a.pmDriverName || "",
                 days: 0,
                 isCover: true,
+                isExternal: !a.pmDriverId,
               };
             driverDays[pmKey].days += 0.5;
-          } else if (amKey) {
-            // No PM driver set — AM driver did both
+          } else if (amKey && !pmKey) {
+            // No PM driver — AM driver did both halves
             driverDays[amKey].days += 0.5;
           }
           return;
@@ -625,14 +647,21 @@ export default function Attendance() {
           driverDays[key].days += 0.5;
           return;
         }
-        const key = a.driverId || a.driverName || null;
+        const key =
+          a.driverId ||
+          (a.isExternalDriver ? a.externalDriverName : null) ||
+          a.driverName ||
+          null;
         if (!key) return;
         if (!driverDays[key]) {
           driverDays[key] = {
             driverId: a.driverId || "",
-            name: a.driverName || "",
+            name: a.isExternalDriver
+              ? a.externalDriverName
+              : a.driverName || "",
             days: 0,
             isCover: a.isCoverDriver,
+            isExternal: a.isExternalDriver || false,
           };
         }
         driverDays[key].days += a.daysValue ?? 1;
@@ -663,7 +692,7 @@ export default function Attendance() {
           days: c.days,
           rate,
           amount: Math.round(c.days * rate * 100) / 100,
-          isExternal: !c.driverId,
+          isExternal: c.isExternal || !c.driverId,
         };
       });
 

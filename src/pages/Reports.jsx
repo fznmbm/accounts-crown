@@ -126,15 +126,23 @@ export default function Reports() {
   });
 
   // Monthly P&L
+  const vatRate = settings?.vatRate || 20;
   const monthly = Array.from({ length: 12 }, (_, i) => {
     const inv = invoices.filter((x) => x.month === i && x.year === year);
-    const pays = payments.filter((p) => p.month === i && p.year === year);
+    const allocs = allocations.filter((a) => a.month === i && a.year === year);
     const invoiced = inv.reduce((s, x) => s + (x.total || 0), 0);
     const netInv = inv.reduce((s, x) => s + (x.netTotal || 0), 0);
     const vatColl = inv.reduce((s, x) => s + (x.vat || 0), 0);
     const received = inv.reduce((s, x) => s + (x.paidAmount || 0), 0);
-    const vatRate = settings?.vatRate || 20;
-    const staffCost = pays.reduce((s, p) => s + p.amount, 0);
+    // Use allocations for staff cost — reflects actual cost earned that month
+    // not distorted by when payments were physically transferred
+    const staffCost = allocs.reduce((s, a) => {
+      const coverTotal =
+        a.coverEntries?.length > 0
+          ? a.coverEntries.reduce((cs, c) => cs + (Number(c.amount) || 0), 0)
+          : Number(a.tempAmount) || 0;
+      return s + (Number(a.regularAmount) || 0) + coverTotal;
+    }, 0);
     const profit = received / (1 + vatRate / 100) - staffCost;
     const margin = received > 0 ? (profit / received) * 100 : null;
     return {
@@ -171,7 +179,7 @@ export default function Reports() {
     totals.received > 0 ? (totals.profit / totals.received) * 100 : null;
 
   // Route P&L — uses allocations for accurate staff cost per route
-  const vatRate = settings?.vatRate || 20;
+
   const routeReport = routes
     .map((r) => {
       const inv = invoices.filter(

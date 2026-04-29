@@ -346,9 +346,10 @@ export default function Dashboard() {
                 No routes yet
               </p>
             ) : (
-              <div className="divide-y divide-gray-100 dark:divide-gray-700">
+              <div className="divide-y divide-gray-100 dark:divide-gray-700 overflow-y-auto max-h-80">
                 {routes
                   .filter((r) => r.active)
+                  //.slice(0, 5)
                   .map((r) => {
                     const driver = staff.find(
                       (s) => s.id === r.primaryDriverId,
@@ -426,7 +427,7 @@ export default function Dashboard() {
               </p>
             ) : (
               <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                {mi.map((inv) => (
+                {mi.slice(0, 5).map((inv) => (
                   <div
                     key={inv.id}
                     className="flex items-center justify-between py-3"

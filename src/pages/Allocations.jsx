@@ -48,19 +48,50 @@ export default function Allocations() {
   );
 
   const getAttendanceSplit = (routeId, month, year) => {
-    const records = attendance.filter(
-      (a) =>
-        a.routeId === routeId &&
-        a.month === month &&
-        a.year === year &&
-        a.status !== "no_run",
-    );
+    const route = routes.find((r) => r.id === routeId);
+    const opDays = route?.operationalDays || [1, 2, 3, 4, 5];
+    const records = attendance.filter((a) => {
+      if (
+        a.routeId !== routeId ||
+        a.month !== month ||
+        a.year !== year ||
+        a.status === "no_run"
+      )
+        return false;
+      const dow = new Date(a.date).getDay();
+      return opDays.includes(dow);
+    });
     const byDriver = {};
     records.forEach((a) => {
-      if (!a.driverId) return;
-      if (!byDriver[a.driverId])
-        byDriver[a.driverId] = { name: a.driverName, days: 0 };
-      byDriver[a.driverId].days += a.daysValue ?? 1;
+      if (a.isSplitRun) {
+        const amKey = a.amDriverId || a.amDriverName || null;
+        const pmKey = a.pmDriverId || a.pmDriverName || null;
+        if (amKey) {
+          if (!byDriver[amKey])
+            byDriver[amKey] = { name: a.amDriverName || "", days: 0 };
+          byDriver[amKey].days += 0.5;
+        }
+        if (pmKey && pmKey !== amKey) {
+          if (!byDriver[pmKey])
+            byDriver[pmKey] = { name: a.pmDriverName || "", days: 0 };
+          byDriver[pmKey].days += 0.5;
+        } else if (amKey && !pmKey) {
+          byDriver[amKey].days += 0.5;
+        }
+        return;
+      }
+      const key =
+        a.driverId ||
+        (a.isExternalDriver ? a.externalDriverName : null) ||
+        a.driverName ||
+        null;
+      if (!key) return;
+      if (!byDriver[key])
+        byDriver[key] = {
+          name: a.isExternalDriver ? a.externalDriverName : a.driverName || "",
+          days: 0,
+        };
+      byDriver[key].days += a.daysValue ?? 1;
     });
     return byDriver;
   };
