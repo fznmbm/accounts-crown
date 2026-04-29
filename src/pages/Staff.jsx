@@ -13,17 +13,26 @@ const TYPES = [
 ];
 const EMPTY = {
   name: "",
+  shortName: "",
   type: "driver",
+  status: "active",
   phone: "",
   email: "",
-  bankName: "",
-  accountNo: "",
-  sortCode: "",
+  dateOfBirth: "",
+  nationality: "",
+  address: "",
   notes: "",
 };
 
 export default function Staff() {
-  const { staff, setStaff, payments, allocations } = useApp();
+  const {
+    staff,
+    setStaff,
+    payments,
+    allocations,
+    portalTokens,
+    setPortalTokens,
+  } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
@@ -31,6 +40,47 @@ export default function Staff() {
   const [typeF, setTypeF] = useState("all");
 
   const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  const getToken = (staffId) =>
+    portalTokens.find((t) => t.staffId === staffId && t.active);
+
+  const generateToken = async (s) => {
+    const existing = getToken(s.id);
+    if (existing) return existing;
+    const newToken = {
+      id: uid(),
+      staffId: s.id,
+      staffName: s.name,
+      token: uid() + uid(),
+      active: true,
+      createdAt: Date.now(),
+    };
+    await setPortalTokens([...portalTokens, newToken]);
+    return newToken;
+  };
+
+  const copyPortalLink = async (s) => {
+    const token = await generateToken(s);
+    const link = `${window.location.origin}/staff/${token.token}`;
+    await navigator.clipboard.writeText(link);
+    alert(
+      `✓ Portal link copied!\n\n${link}\n\nSend this to ${s.name} — they can use it every month.`,
+    );
+  };
+
+  const revokeToken = (staffId) => {
+    if (
+      !confirm(
+        "Revoke this driver's portal link? They will no longer be able to submit invoices until a new link is generated.",
+      )
+    )
+      return;
+    setPortalTokens(
+      portalTokens.map((t) =>
+        t.staffId === staffId ? { ...t, active: false } : t,
+      ),
+    );
+  };
   const open = () => {
     setForm(EMPTY);
     setEditing(null);
@@ -167,6 +217,11 @@ export default function Staff() {
                   </div>
                 </div>
                 <div className="space-y-1.5 mb-4">
+                  {s.shortName && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      🏷 {s.shortName}
+                    </p>
+                  )}
                   {s.phone && (
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       📞 {s.phone}
@@ -177,18 +232,24 @@ export default function Staff() {
                       ✉ {s.email}
                     </p>
                   )}
-                  {s.accountNo && (
+                  {s.address && (
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      🏦{" "}
-                      <span className="font-mono">
-                        {s.sortCode} · {s.accountNo}
-                      </span>
-                      {s.bankName && (
-                        <span className="text-gray-400 dark:text-gray-500">
-                          {" "}
-                          ({s.bankName})
-                        </span>
-                      )}
+                      📍 {s.address}
+                    </p>
+                  )}
+                  {s.dateOfBirth && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      🎂 {new Date(s.dateOfBirth).toLocaleDateString("en-GB")}
+                    </p>
+                  )}
+                  {s.nationality && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      🌍 {s.nationality}
+                    </p>
+                  )}
+                  {s.status && s.status !== "active" && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 font-medium capitalize">
+                      ● {s.status}
                     </p>
                   )}
                   {s.notes && (
@@ -204,6 +265,45 @@ export default function Staff() {
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                     {fmt(totalPaid(s.id))}
                   </span>
+                </div>
+                <div className="border-t border-gray-100 dark:border-gray-700 pt-3 mt-3">
+                  {(() => {
+                    const token = getToken(s.id);
+                    return token ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+                          <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+                            Portal active
+                          </span>
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                            onClick={() => copyPortalLink(s)}
+                          >
+                            Copy link
+                          </button>
+                          <span className="text-gray-300 dark:text-gray-600">
+                            ·
+                          </span>
+                          <button
+                            className="text-xs text-red-500 dark:text-red-400 hover:underline"
+                            onClick={() => revokeToken(s.id)}
+                          >
+                            Revoke
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        className="w-full text-xs text-blue-600 dark:text-blue-400 hover:underline text-left"
+                        onClick={() => copyPortalLink(s)}
+                      >
+                        🔗 Generate &amp; copy portal link
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             ))}
@@ -227,6 +327,19 @@ export default function Staff() {
                   placeholder="John Smith"
                 />
               </FormField>
+              <FormField
+                label="Short name"
+                hint="Used in attendance grid e.g. John"
+              >
+                <input
+                  className="input"
+                  value={form.shortName}
+                  onChange={f("shortName")}
+                  placeholder="John"
+                />
+              </FormField>
+            </FormGrid>
+            <FormGrid cols={2}>
               <FormField label="Role">
                 <select
                   className="input"
@@ -238,6 +351,17 @@ export default function Staff() {
                       {t.label}
                     </option>
                   ))}
+                </select>
+              </FormField>
+              <FormField label="Status">
+                <select
+                  className="input"
+                  value={form.status}
+                  onChange={f("status")}
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="suspended">Suspended</option>
                 </select>
               </FormField>
             </FormGrid>
@@ -260,35 +384,32 @@ export default function Staff() {
                 />
               </FormField>
             </FormGrid>
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide pt-2 border-t border-gray-100 dark:border-gray-700">
-              Bank details
-            </p>
-            <FormGrid cols={3}>
-              <FormField label="Bank name">
+            <FormGrid cols={2}>
+              <FormField label="Date of birth">
                 <input
                   className="input"
-                  value={form.bankName}
-                  onChange={f("bankName")}
-                  placeholder="Barclays"
+                  type="date"
+                  value={form.dateOfBirth}
+                  onChange={f("dateOfBirth")}
                 />
               </FormField>
-              <FormField label="Sort code">
+              <FormField label="Nationality">
                 <input
-                  className="input font-mono"
-                  value={form.sortCode}
-                  onChange={f("sortCode")}
-                  placeholder="30-99-50"
-                />
-              </FormField>
-              <FormField label="Account number">
-                <input
-                  className="input font-mono"
-                  value={form.accountNo}
-                  onChange={f("accountNo")}
-                  placeholder="12345678"
+                  className="input"
+                  value={form.nationality}
+                  onChange={f("nationality")}
+                  placeholder="British"
                 />
               </FormField>
             </FormGrid>
+            <FormField label="Address">
+              <input
+                className="input"
+                value={form.address}
+                onChange={f("address")}
+                placeholder="1 High Street, Crawley, RH10 1AA"
+              />
+            </FormField>
             <FormField label="Notes">
               <textarea
                 className="input"

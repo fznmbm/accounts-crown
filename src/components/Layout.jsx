@@ -16,6 +16,9 @@ const NAV = [
   { to: "/staff", label: "Staff" },
   { to: "/payments", label: "Staff Payments" },
   { to: "/staff-ledger", label: "Staff Ledger" },
+  { to: "/compliance", label: "Compliance" },
+  { to: "/applications", label: "Applications" },
+  { to: "/invoice-submissions", label: "Invoice Submissions" },
   { to: "/reports", label: "Reports" },
   { to: "/audit", label: "Audit Log" },
 ];
@@ -60,7 +63,11 @@ function MoonIcon() {
 export default function Layout() {
   const { dark, toggle } = useTheme();
   const { user, logout } = useAuth();
-  const { settings } = useApp();
+  const { settings, applications, submissions } = useApp();
+  const pendingCount =
+    applications?.filter((a) => a.status === "pending").length || 0;
+  const pendingSubmissions =
+    submissions?.filter((s) => s.status === "submitted").length || 0;
   const logoUrl = settings?.logoUrl || CONFIG.logoUrl;
 
   return (
@@ -107,14 +114,24 @@ export default function Layout() {
               key={to}
               to={to}
               className={({ isActive }) =>
-                `flex items-center px-3 py-2 rounded-lg text-sm transition-colors ${
+                `flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
                   isActive
                     ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium"
                     : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-200"
                 }`
               }
             >
-              {label}
+              <span>{label}</span>
+              {label === "Applications" && pendingCount > 0 && (
+                <span className="ml-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {pendingCount}
+                </span>
+              )}
+              {label === "Invoice Submissions" && pendingSubmissions > 0 && (
+                <span className="ml-1 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {pendingSubmissions}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

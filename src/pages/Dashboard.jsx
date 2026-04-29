@@ -24,6 +24,9 @@ export default function Dashboard() {
     settings,
     allocations,
     pupils,
+    staffLicences,
+    staffTraining,
+    submissions,
   } = useApp();
   const [month, setMonth] = useState(() => {
     const s = localStorage.getItem("dash_month");
@@ -55,6 +58,57 @@ export default function Dashboard() {
           a.year === year,
       ),
   );
+  // ── Compliance alerts ──────────────────────────────────────────────────────
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysUntil = (dateStr) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    d.setHours(0, 0, 0, 0);
+    return Math.floor((d - today) / 86400000);
+  };
+  const complianceIssues = [];
+  staffLicences.forEach((l) => {
+    const s = staff.find((x) => x.id === l.staffId);
+    const name = s?.name || "Unknown";
+    [
+      { label: "Driver licence", date: l.driverLicenceExpiry },
+      { label: "Vehicle licence", date: l.vehicleLicenceExpiry },
+      { label: "Insurance", date: l.insuranceExpiry },
+    ].forEach(({ label, date }) => {
+      if (!date) return;
+      const d = daysUntil(date);
+      if (d !== null && d <= 60) {
+        complianceIssues.push({
+          name,
+          label: `${label} (${l.authority})`,
+          daysLeft: d,
+          type: "licence",
+        });
+      }
+    });
+  });
+  staffTraining.forEach((t) => {
+    const s = staff.find((x) => x.id === t.staffId);
+    const name = s?.name || "Unknown";
+    const d = daysUntil(t.expiryDate);
+    if (d !== null && d <= 60) {
+      complianceIssues.push({
+        name,
+        label: t.trainingType,
+        daysLeft: d,
+        type: "training",
+      });
+    }
+  });
+  const expiredIssues = complianceIssues.filter((x) => x.daysLeft < 0);
+  const criticalIssues = complianceIssues.filter(
+    (x) => x.daysLeft >= 0 && x.daysLeft <= 30,
+  );
+  const warningIssues = complianceIssues.filter(
+    (x) => x.daysLeft > 30 && x.daysLeft <= 60,
+  );
+
   const recentRem = [...remittances]
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 5);
@@ -189,6 +243,133 @@ export default function Dashboard() {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pending submissions widget */}
+        {(() => {
+          const pending = submissions.filter((s) => s.status === "submitted");
+          if (pending.length === 0) return null;
+          const total = pending.reduce((s, x) => s + (x.invoiceAmount || 0), 0);
+          return (
+            <div className="rounded-xl border p-4 bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <span className="text-lg mt-0.5">📄</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-2">
+                      {pending.length} invoice submission
+                      {pending.length !== 1 ? "s" : ""} awaiting review —{" "}
+                      {fmt(total)} total claimed
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {pending.slice(0, 6).map((s) => (
+                        <Link
+                          key={s.id}
+                          to="/invoice-submissions"
+                          className="inline-flex items-center gap-1 text-xs bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-400 px-2.5 py-1 rounded-full hover:bg-amber-50 dark:hover:bg-amber-900/20 transition"
+                        >
+                          <span className="font-semibold">
+                            {s.staffName?.split(" ")[0]}
+                          </span>
+                          <span>
+                            — {MONTHS_SHORT[s.month]} {s.year}
+                          </span>
+                          <span className="opacity-75">
+                            {fmt(s.invoiceAmount)}
+                          </span>
+                        </Link>
+                      ))}
+                      {pending.length > 6 && (
+                        <Link
+                          to="/invoice-submissions"
+                          className="text-xs text-amber-600 dark:text-amber-400 hover:underline px-1"
+                        >
+                          +{pending.length - 6} more…
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <Link
+                  to="/invoice-submissions"
+                  className="btn-ghost text-xs flex-shrink-0"
+                >
+                  Review all →
+                </Link>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Compliance widget */}
+        {complianceIssues.length > 0 && (
+          <div
+            className={`rounded-xl border p-4 ${expiredIssues.length > 0 || criticalIssues.length > 0 ? "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800" : "bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800"}`}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3 flex-1 min-w-0">
+                <span className="text-lg mt-0.5">🚨</span>
+                <div className="min-w-0">
+                  <p
+                    className={`text-sm font-semibold mb-2 ${expiredIssues.length > 0 || criticalIssues.length > 0 ? "text-red-800 dark:text-red-300" : "text-amber-800 dark:text-amber-300"}`}
+                  >
+                    Compliance alerts —{" "}
+                    {expiredIssues.length > 0 &&
+                      `${expiredIssues.length} expired`}
+                    {expiredIssues.length > 0 &&
+                      criticalIssues.length > 0 &&
+                      ", "}
+                    {criticalIssues.length > 0 &&
+                      `${criticalIssues.length} expiring within 30 days`}
+                    {(expiredIssues.length > 0 || criticalIssues.length > 0) &&
+                      warningIssues.length > 0 &&
+                      ", "}
+                    {warningIssues.length > 0 &&
+                      `${warningIssues.length} expiring within 60 days`}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {[...expiredIssues, ...criticalIssues, ...warningIssues]
+                      .slice(0, 8)
+                      .map((issue, i) => (
+                        <Link
+                          key={i}
+                          to="/compliance"
+                          className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition ${
+                            issue.daysLeft < 0
+                              ? "bg-white dark:bg-gray-800 border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              : issue.daysLeft <= 30
+                                ? "bg-white dark:bg-gray-800 border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                : "bg-white dark:bg-gray-800 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                          }`}
+                        >
+                          <span className="font-semibold">{issue.name}</span>
+                          <span>— {issue.label}</span>
+                          <span className="opacity-75">
+                            {issue.daysLeft < 0
+                              ? `(expired ${Math.abs(issue.daysLeft)}d ago)`
+                              : `(${issue.daysLeft}d left)`}
+                          </span>
+                        </Link>
+                      ))}
+                    {complianceIssues.length > 8 && (
+                      <Link
+                        to="/compliance"
+                        className="text-xs text-gray-500 dark:text-gray-400 hover:underline px-1"
+                      >
+                        +{complianceIssues.length - 8} more…
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <Link
+                to="/compliance"
+                className="btn-ghost text-xs flex-shrink-0"
+              >
+                View all →
+              </Link>
             </div>
           </div>
         )}

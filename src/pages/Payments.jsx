@@ -35,7 +35,7 @@ const EMPTY = {
 };
 
 export default function Payments() {
-  const { payments, setPayments, staff, allocations } = useApp();
+  const { payments, setPayments, staff, allocations, submissions } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
@@ -289,6 +289,20 @@ export default function Payments() {
                           {p.allocationIds.length > 1 ? "s" : ""}
                         </p>
                       )}
+                      {(() => {
+                        const sub = submissions?.find(
+                          (s) => s.paymentId === p.id,
+                        );
+                        if (!sub) return null;
+                        return (
+                          <a
+                            href="/invoice-submissions"
+                            className="text-xs text-purple-600 dark:text-purple-400 hover:underline mt-0.5 block"
+                          >
+                            📄 View original submission
+                          </a>
+                        );
+                      })()}
                     </td>
                     <td className="td-r font-semibold text-gray-900 dark:text-gray-100">
                       {fmt(p.amount)}

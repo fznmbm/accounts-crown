@@ -818,4 +818,3 @@ export default function HolidayCalendar() {
     </div>
   );
 }
-// file name changed to HolidayCalendar.jsx to match component name and avoid confusion with the folder name. Please update the import in App.jsx accordingly.

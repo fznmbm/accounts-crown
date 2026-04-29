@@ -158,6 +158,9 @@ export default function Settings() {
   } = useApp();
   const [form, setForm] = useState({ ...DEFAULT_SETTINGS, ...settings });
   const [saved, setSaved] = useState(false);
+  const [newAuthority, setNewAuthority] = useState("");
+  const [newTrainingName, setNewTrainingName] = useState("");
+  const [newTrainingYears, setNewTrainingYears] = useState(3);
 
   const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
@@ -373,6 +376,157 @@ export default function Settings() {
                 />
               </FormField>
             </FormGrid>
+          </div>
+
+          {/* Licensing authorities */}
+          <div className="card p-5 space-y-4">
+            <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
+              Licensing authorities
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Used in Compliance page when adding driver licences.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(form.licensingAuthorities || []).map((a, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 px-2.5 py-1 rounded-full"
+                >
+                  <span className="text-xs text-gray-700 dark:text-gray-300">
+                    {a}
+                  </span>
+                  <button
+                    onClick={() =>
+                      setForm((p) => ({
+                        ...p,
+                        licensingAuthorities: p.licensingAuthorities.filter(
+                          (_, j) => j !== i,
+                        ),
+                      }))
+                    }
+                    className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 ml-1 text-xs leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                className="input flex-1"
+                value={newAuthority}
+                onChange={(e) => setNewAuthority(e.target.value)}
+                placeholder="e.g. Brighton & Hove"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newAuthority.trim()) {
+                    setForm((p) => ({
+                      ...p,
+                      licensingAuthorities: [
+                        ...(p.licensingAuthorities || []),
+                        newAuthority.trim(),
+                      ],
+                    }));
+                    setNewAuthority("");
+                  }
+                }}
+              />
+              <button
+                className="btn-secondary text-sm"
+                onClick={() => {
+                  if (!newAuthority.trim()) return;
+                  setForm((p) => ({
+                    ...p,
+                    licensingAuthorities: [
+                      ...(p.licensingAuthorities || []),
+                      newAuthority.trim(),
+                    ],
+                  }));
+                  setNewAuthority("");
+                }}
+              >
+                + Add
+              </button>
+            </div>
+          </div>
+
+          {/* Training types */}
+          <div className="card p-5 space-y-4">
+            <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
+              Training types
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Mandatory and optional training courses tracked in Compliance.
+            </p>
+            <div className="space-y-2">
+              {(form.trainingTypes || []).map((t, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-3 p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                >
+                  <span className="text-sm text-gray-900 dark:text-gray-100 flex-1">
+                    {t.name}
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    Every {t.renewalYears}yr{t.renewalYears !== 1 ? "s" : ""}
+                  </span>
+                  <button
+                    onClick={() =>
+                      setForm((p) => ({
+                        ...p,
+                        trainingTypes: p.trainingTypes.filter(
+                          (_, j) => j !== i,
+                        ),
+                      }))
+                    }
+                    className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 text-xs"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 items-end">
+              <div className="flex-1">
+                <p className="label mb-1">Training name</p>
+                <input
+                  className="input"
+                  value={newTrainingName}
+                  onChange={(e) => setNewTrainingName(e.target.value)}
+                  placeholder="e.g. First Aid"
+                />
+              </div>
+              <div className="w-28">
+                <p className="label mb-1">Renewal (years)</p>
+                <input
+                  className="input"
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={newTrainingYears}
+                  onChange={(e) => setNewTrainingYears(Number(e.target.value))}
+                />
+              </div>
+              <button
+                className="btn-secondary text-sm mb-0.5"
+                onClick={() => {
+                  if (!newTrainingName.trim()) return;
+                  setForm((p) => ({
+                    ...p,
+                    trainingTypes: [
+                      ...(p.trainingTypes || []),
+                      {
+                        name: newTrainingName.trim(),
+                        renewalYears: newTrainingYears,
+                      },
+                    ],
+                  }));
+                  setNewTrainingName("");
+                  setNewTrainingYears(3);
+                }}
+              >
+                + Add
+              </button>
+            </div>
           </div>
 
           {/* Data management */}

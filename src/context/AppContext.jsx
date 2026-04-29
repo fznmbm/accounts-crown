@@ -14,6 +14,27 @@ export const DEFAULT_SETTINGS = {
   sortCode: "30-99-50",
   supplierNumber: "103820",
   vatRate: 20,
+  licensingAuthorities: [
+    "Crawley",
+    "Mid Sussex",
+    "Reigate & Banstead",
+    "Horsham",
+    "Worthing",
+    "Adur",
+    "Arun",
+    "Chichester",
+    "Eastbourne",
+    "Hastings",
+    "Lewes",
+    "Rother",
+    "Wealden",
+    "Other",
+  ],
+  trainingTypes: [
+    { name: "Safeguarding", renewalYears: 3 },
+    { name: "Disability Awareness", renewalYears: 3 },
+    { name: "Challenging Behaviour", renewalYears: 3 },
+  ],
 };
 
 // ── camelCase ↔ snake_case mappers ──────────────────────────────────────────
@@ -108,9 +129,14 @@ const invoiceToDb = (x, uid) => ({
 const staffFromDb = (s) => ({
   id: s.id,
   name: s.name,
+  shortName: s.short_name || "",
   type: s.type,
   phone: s.phone,
   email: s.email,
+  dateOfBirth: s.date_of_birth || "",
+  nationality: s.nationality || "",
+  status: s.status || "active",
+  address: s.address || "",
   bankName: s.bank_name,
   accountNo: s.account_no,
   sortCode: s.sort_code,
@@ -121,12 +147,17 @@ const staffToDb = (s, uid) => ({
   id: s.id,
   user_id: uid,
   name: s.name,
+  short_name: s.shortName || null,
   type: s.type,
   phone: s.phone,
   email: s.email,
-  bank_name: s.bankName,
-  account_no: s.accountNo,
-  sort_code: s.sortCode,
+  date_of_birth: s.dateOfBirth || null,
+  nationality: s.nationality || null,
+  status: s.status || "active",
+  address: s.address || null,
+  bank_name: s.bankName || null,
+  account_no: s.accountNo || null,
+  sort_code: s.sortCode || null,
   notes: s.notes,
   created_at: s.createdAt,
 });
@@ -432,6 +463,194 @@ const auditToDb = (a, uid) => ({
   created_at: a.createdAt,
 });
 
+// ── New table mappers ────────────────────────────────────────────────────────
+const staffLicenceFromDb = (l) => ({
+  id: l.id,
+  staffId: l.staff_id,
+  authority: l.authority,
+  driverLicenceNumber: l.driver_licence_number,
+  driverLicenceExpiry: l.driver_licence_expiry,
+  vehicleMake: l.vehicle_make,
+  vehicleModel: l.vehicle_model,
+  vehicleColour: l.vehicle_colour,
+  vehicleRegistration: l.vehicle_registration,
+  vehicleLicenceNumber: l.vehicle_licence_number,
+  vehicleLicenceExpiry: l.vehicle_licence_expiry,
+  insuranceExpiry: l.insurance_expiry,
+  documents: l.documents || [],
+  notes: l.notes,
+  createdAt: l.created_at,
+});
+const staffLicenceToDb = (l, uid) => ({
+  id: l.id,
+  user_id: uid,
+  staff_id: l.staffId,
+  authority: l.authority,
+  driver_licence_number: l.driverLicenceNumber,
+  driver_licence_expiry: l.driverLicenceExpiry || null,
+  vehicle_make: l.vehicleMake,
+  vehicle_model: l.vehicleModel,
+  vehicle_colour: l.vehicleColour,
+  vehicle_registration: l.vehicleRegistration,
+  vehicle_licence_number: l.vehicleLicenceNumber,
+  vehicle_licence_expiry: l.vehicleLicenceExpiry || null,
+  insurance_expiry: l.insuranceExpiry || null,
+  documents: l.documents || [],
+  notes: l.notes,
+  created_at: l.createdAt,
+});
+
+const staffTrainingFromDb = (t) => ({
+  id: t.id,
+  staffId: t.staff_id,
+  trainingType: t.training_type,
+  renewalYears: t.renewal_years ?? 3,
+  completedDate: t.completed_date,
+  expiryDate: t.expiry_date,
+  certificateUrl: t.certificate_url,
+  notes: t.notes,
+  createdAt: t.created_at,
+});
+const staffTrainingToDb = (t, uid) => ({
+  id: t.id,
+  user_id: uid,
+  staff_id: t.staffId,
+  training_type: t.trainingType,
+  renewal_years: t.renewalYears ?? 3,
+  completed_date: t.completedDate,
+  expiry_date: t.expiryDate,
+  certificate_url: t.certificateUrl || null,
+  notes: t.notes,
+  created_at: t.createdAt,
+});
+
+const portalTokenFromDb = (t) => ({
+  id: t.id,
+  staffId: t.staff_id,
+  staffName: t.staff_name,
+  token: t.token,
+  active: t.active,
+  createdAt: t.created_at,
+});
+const portalTokenToDb = (t, uid) => ({
+  id: t.id,
+  user_id: uid,
+  staff_id: t.staffId,
+  staff_name: t.staffName,
+  token: t.token,
+  active: t.active,
+  created_at: t.createdAt,
+});
+
+const submissionFromDb = (s) => ({
+  id: s.id,
+  tokenId: s.token_id,
+  staffId: s.staff_id,
+  staffName: s.staff_name,
+  month: s.month,
+  year: s.year,
+  routeEntries: s.route_entries || [],
+  coverEntries: s.cover_entries || [],
+  daysConfirmed: s.days_confirmed,
+  invoiceNumber: s.invoice_number,
+  invoiceAmount: s.invoice_amount,
+  periodFrom: s.period_from,
+  periodTo: s.period_to,
+  signatureName: s.signature_name,
+  signatureDate: s.signature_date,
+  notes: s.notes,
+  status: s.status || "submitted",
+  submittedAt: s.submitted_at,
+  approvedAt: s.approved_at,
+  paymentId: s.payment_id,
+  createdAt: s.created_at,
+});
+const submissionToDb = (s, uid) => ({
+  id: s.id,
+  user_id: uid,
+  token_id: s.tokenId,
+  staff_id: s.staffId,
+  staff_name: s.staffName,
+  month: s.month,
+  year: s.year,
+  route_entries: s.routeEntries || [],
+  cover_entries: s.coverEntries || [],
+  days_confirmed: s.daysConfirmed,
+  invoice_number: s.invoiceNumber,
+  invoice_amount: s.invoiceAmount,
+  period_from: s.periodFrom || null,
+  period_to: s.periodTo || null,
+  signature_name: s.signatureName || null,
+  signature_date: s.signatureDate || null,
+  notes: s.notes,
+  status: s.status || "submitted",
+  submitted_at: s.submittedAt,
+  approved_at: s.approvedAt,
+  payment_id: s.paymentId,
+  created_at: s.createdAt,
+});
+
+const applicationFromDb = (a) => ({
+  id: a.id,
+  targetUserId: a.target_user_id,
+  positionType: a.position_type,
+  fullName: a.full_name,
+  email: a.email,
+  phone: a.phone,
+  currentAddress: a.current_address,
+  previousAddress: a.previous_address,
+  niNumber: a.ni_number,
+  nationality: a.nationality,
+  hasUkDrivingLicence: a.has_uk_driving_licence || false,
+  requiresWorkPermit: a.requires_work_permit || false,
+  workPermitNumber: a.work_permit_number,
+  workPermitDocUrl: a.work_permit_doc_url,
+  hasConvictions: a.has_convictions || false,
+  convictionDetails: a.conviction_details,
+  dbsRegistered: a.dbs_registered || false,
+  dbsName: a.dbs_name,
+  dbsDob: a.dbs_dob,
+  dbsCertNumber: a.dbs_cert_number,
+  dbsUpdateId: a.dbs_update_id,
+  applicantRefs: a.applicant_refs || [],
+  declarationAgreed: a.declaration_agreed || false,
+  declarationName: a.declaration_name,
+  declarationDate: a.declaration_date,
+  status: a.status || "pending",
+  adminNotes: a.admin_notes,
+  createdAt: a.created_at,
+});
+const applicationToDb = (a, uid) => ({
+  id: a.id,
+  target_user_id: uid,
+  position_type: a.positionType,
+  full_name: a.fullName,
+  email: a.email,
+  phone: a.phone,
+  current_address: a.currentAddress,
+  previous_address: a.previousAddress,
+  ni_number: a.niNumber,
+  nationality: a.nationality,
+  has_uk_driving_licence: a.hasUkDrivingLicence || false,
+  requires_work_permit: a.requiresWorkPermit || false,
+  work_permit_number: a.workPermitNumber || null,
+  work_permit_doc_url: a.workPermitDocUrl || null,
+  has_convictions: a.hasConvictions || false,
+  conviction_details: a.convictionDetails || null,
+  dbs_registered: a.dbsRegistered || false,
+  dbs_name: a.dbsName || null,
+  dbs_dob: a.dbsDob || null,
+  dbs_cert_number: a.dbsCertNumber || null,
+  dbs_update_id: a.dbsUpdateId || null,
+  applicant_refs: a.applicantRefs || [],
+  declaration_agreed: a.declarationAgreed || false,
+  declaration_name: a.declarationName || null,
+  declaration_date: a.declarationDate || null,
+  status: a.status || "pending",
+  admin_notes: a.adminNotes || null,
+  created_at: a.createdAt,
+});
+
 // ── sync helper: replace all rows for user in a table ────────────────────────
 async function syncTable(table, data, toDb, userId) {
   await supabase.from(table).delete().eq("user_id", userId);
@@ -465,6 +684,11 @@ export function AppProvider({ children }) {
   const [attendance, setRawAttendance] = useState([]);
   const [holidays, setRawHolidays] = useState([]);
   const [settings, setRawSettings] = useState(DEFAULT_SETTINGS);
+  const [staffLicences, setRawStaffLicences] = useState([]);
+  const [staffTraining, setRawStaffTraining] = useState([]);
+  const [portalTokens, setRawPortalTokens] = useState([]);
+  const [submissions, setRawSubmissions] = useState([]);
+  const [applications, setRawApplications] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // ── Load all data on mount ─────────────────────────────────────────────────
@@ -524,6 +748,33 @@ export function AppProvider({ children }) {
 
         setRawHolidays((hol.data || []).map(holidayFromDb));
         if (hol.error) console.error("school_holidays:", hol.error);
+
+        const [lic, trn, tok, sub, app] = [
+          await supabase.from("staff_licences").select("*").eq("user_id", uid),
+          await supabase.from("staff_training").select("*").eq("user_id", uid),
+          await supabase
+            .from("staff_portal_tokens")
+            .select("*")
+            .eq("user_id", uid),
+          await supabase
+            .from("staff_invoice_submissions")
+            .select("*")
+            .eq("user_id", uid),
+          await supabase
+            .from("staff_applications")
+            .select("*")
+            .eq("target_user_id", uid),
+        ];
+        setRawStaffLicences((lic.data || []).map(staffLicenceFromDb));
+        if (lic.error) console.error("staff_licences:", lic.error);
+        setRawStaffTraining((trn.data || []).map(staffTrainingFromDb));
+        if (trn.error) console.error("staff_training:", trn.error);
+        setRawPortalTokens((tok.data || []).map(portalTokenFromDb));
+        if (tok.error) console.error("staff_portal_tokens:", tok.error);
+        setRawSubmissions((sub.data || []).map(submissionFromDb));
+        if (sub.error) console.error("staff_invoice_submissions:", sub.error);
+        setRawApplications((app.data || []).map(applicationFromDb));
+        if (app.error) console.error("staff_applications:", app.error);
 
         if (r.error) console.error("routes:", r.error);
         if (inv.error) console.error("invoices:", inv.error);
@@ -642,6 +893,36 @@ export function AppProvider({ children }) {
     await syncTable("school_holidays", data, holidayToDb, user.id);
   };
 
+  const setStaffLicences = async (data) => {
+    setRawStaffLicences(data);
+    await syncTable("staff_licences", data, staffLicenceToDb, user.id);
+  };
+
+  const setStaffTraining = async (data) => {
+    setRawStaffTraining(data);
+    await syncTable("staff_training", data, staffTrainingToDb, user.id);
+  };
+
+  const setPortalTokens = async (data) => {
+    setRawPortalTokens(data);
+    await syncTable("staff_portal_tokens", data, portalTokenToDb, user.id);
+  };
+
+  const setSubmissions = async (data) => {
+    setRawSubmissions(data);
+    await syncTable("staff_invoice_submissions", data, submissionToDb, user.id);
+  };
+
+  const setApplications = async (data) => {
+    setRawApplications(data);
+    if (data.length === 0) return;
+    const rows = data.map((a) => applicationToDb(a, user.id));
+    const { error } = await supabase
+      .from("staff_applications")
+      .upsert(rows, { onConflict: "id" });
+    if (error) console.error("applications upsert error:", error);
+  };
+
   const addAuditEntry = async (
     action,
     entity,
@@ -705,6 +986,16 @@ export function AppProvider({ children }) {
         setHolidays,
         settings,
         setSettings,
+        staffLicences,
+        setStaffLicences,
+        staffTraining,
+        setStaffTraining,
+        portalTokens,
+        setPortalTokens,
+        submissions,
+        setSubmissions,
+        applications,
+        setApplications,
       }}
     >
       {children}
