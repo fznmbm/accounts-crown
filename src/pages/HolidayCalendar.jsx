@@ -77,6 +77,9 @@ const EMPTY = {
   type: "inset_day",
   allRoutes: true,
   routeIds: [],
+  isRange: false,
+  dateFrom: "",
+  dateTo: "",
 };
 
 export default function HolidayCalendar() {
@@ -134,14 +137,70 @@ export default function HolidayCalendar() {
   };
 
   const save = () => {
-    if (!form.date || !form.label) return;
+    if (!form.label) return;
+    const allRoutes = form.allRoutes === true || form.allRoutes === "true";
+
+    if (form.isRange && !editing) {
+      // Range mode — create one record per working day in range
+      if (!form.dateFrom || !form.dateTo) return;
+      const from = new Date(form.dateFrom);
+      const to = new Date(form.dateTo);
+      if (to < from) {
+        alert("End date must be after start date");
+        return;
+      }
+      const newRecords = [];
+      const cur = new Date(from);
+      while (cur <= to) {
+        const dow = cur.getDay();
+        if (dow >= 1 && dow <= 5) {
+          // Mon-Fri only
+          const dateStr = cur.toISOString().split("T")[0];
+          const alreadyExists = holidays.some((h) => h.date === dateStr);
+          if (!alreadyExists) {
+            const [y, m] = dateStr.split("-");
+            newRecords.push({
+              id: uid(),
+              date: dateStr,
+              label: form.label,
+              type: form.type,
+              allRoutes,
+              routeIds: form.routeIds || [],
+              month: parseInt(m) - 1,
+              year: parseInt(y),
+              createdAt: Date.now(),
+            });
+          }
+        }
+        cur.setDate(cur.getDate() + 1);
+      }
+      if (newRecords.length === 0) {
+        alert("No new working days found in that range.");
+        return;
+      }
+      if (
+        confirm(
+          `Add ${newRecords.length} non-working day${newRecords.length !== 1 ? "s" : ""} (${form.dateFrom} to ${form.dateTo})?`,
+        )
+      ) {
+        setHolidays([...holidays, ...newRecords]);
+        close();
+      }
+      return;
+    }
+
+    // Single day mode
+    if (!form.date) return;
     const [y, m] = form.date.split("-");
     const record = {
       id: editing?.id || uid(),
-      ...form,
+      date: form.date,
+      label: form.label,
+      type: form.type,
+      allRoutes,
+      routeIds: form.routeIds || [],
       month: parseInt(m) - 1,
       year: parseInt(y),
-      allRoutes: form.allRoutes === true || form.allRoutes === "true",
       createdAt: editing?.createdAt || Date.now(),
     };
     setHolidays(
@@ -503,15 +562,56 @@ export default function HolidayCalendar() {
           size="md"
         >
           <div className="space-y-4">
+            {/* Single / Range toggle — only for new records */}
+            {!editing && (
+              <div className="flex gap-2 p-1 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setForm((p) => ({ ...p, isRange: false }))}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${!form.isRange ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm" : "text-gray-500 dark:text-gray-400"}`}
+                >
+                  Single day
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm((p) => ({ ...p, isRange: true }))}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${form.isRange ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm" : "text-gray-500 dark:text-gray-400"}`}
+                >
+                  Date range
+                </button>
+              </div>
+            )}
+
             <FormGrid cols={2}>
-              <FormField label="Date *">
-                <input
-                  className="input"
-                  type="date"
-                  value={form.date}
-                  onChange={f("date")}
-                />
-              </FormField>
+              {form.isRange && !editing ? (
+                <>
+                  <FormField label="From date *">
+                    <input
+                      className="input"
+                      type="date"
+                      value={form.dateFrom}
+                      onChange={f("dateFrom")}
+                    />
+                  </FormField>
+                  <FormField label="To date *">
+                    <input
+                      className="input"
+                      type="date"
+                      value={form.dateTo}
+                      onChange={f("dateTo")}
+                    />
+                  </FormField>
+                </>
+              ) : (
+                <FormField label="Date *">
+                  <input
+                    className="input"
+                    type="date"
+                    value={form.date}
+                    onChange={f("date")}
+                  />
+                </FormField>
+              )}
               <FormField label="Type">
                 <select
                   className="input"
@@ -573,6 +673,92 @@ export default function HolidayCalendar() {
 
             {(form.allRoutes === false || form.allRoutes === "false") && (
               <FormField label="Select routes">
+                {/* School quick-select */}
+                {(() => {
+                  const schools = [
+                    ...new Set(
+                      routes
+                        .filter((r) => r.active && r.school)
+                        .map((r) => r.school),
+                    ),
+                  ].sort();
+                  if (schools.length === 0) return null;
+                  return (
+                    <div className="mb-2 space-y-1">
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">
+                        Quick select by school:
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {schools.map((school) => {
+                          const schoolRoutes = routes.filter(
+                            (r) => r.active && r.school === school,
+                          );
+                          const allSelected = schoolRoutes.every((r) =>
+                            form.routeIds?.includes(r.id),
+                          );
+                          return (
+                            <button
+                              key={school}
+                              type="button"
+                              onClick={() => {
+                                const schoolIds = schoolRoutes.map((r) => r.id);
+                                if (allSelected) {
+                                  setForm((p) => ({
+                                    ...p,
+                                    routeIds: p.routeIds.filter(
+                                      (id) => !schoolIds.includes(id),
+                                    ),
+                                  }));
+                                } else {
+                                  setForm((p) => ({
+                                    ...p,
+                                    routeIds: [
+                                      ...new Set([
+                                        ...(p.routeIds || []),
+                                        ...schoolIds,
+                                      ]),
+                                    ],
+                                  }));
+                                }
+                              }}
+                              className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors ${
+                                allSelected
+                                  ? "bg-blue-600 border-blue-600 text-white"
+                                  : "bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-400"
+                              }`}
+                            >
+                              {school} ({schoolRoutes.length})
+                            </button>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm((p) => ({
+                              ...p,
+                              routeIds: routes
+                                .filter((r) => r.active)
+                                .map((r) => r.id),
+                            }))
+                          }
+                          className="text-xs px-2.5 py-1 rounded-full border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-blue-400"
+                        >
+                          Select all
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm((p) => ({ ...p, routeIds: [] }))
+                          }
+                          className="text-xs px-2.5 py-1 rounded-full border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-red-400"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+                {/* Individual route list */}
                 <div className="space-y-1.5 max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-2">
                   {routes
                     .filter((r) => r.active)
@@ -587,12 +773,25 @@ export default function HolidayCalendar() {
                           onChange={() => toggleRoute(r.id)}
                           className="w-4 h-4 rounded"
                         />
-                        <span className="text-sm text-gray-700 dark:text-gray-300">
-                          Route {r.number} — {r.name}
-                        </span>
+                        <div className="min-w-0">
+                          <span className="text-sm text-gray-700 dark:text-gray-300">
+                            Route {r.number} — {r.name}
+                          </span>
+                          {r.school && (
+                            <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">
+                              {r.school}
+                            </span>
+                          )}
+                        </div>
                       </label>
                     ))}
                 </div>
+                {form.routeIds?.length > 0 && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    {form.routeIds.length} route
+                    {form.routeIds.length !== 1 ? "s" : ""} selected
+                  </p>
+                )}
               </FormField>
             )}
           </div>
@@ -604,7 +803,12 @@ export default function HolidayCalendar() {
             <button
               className="btn-primary"
               onClick={save}
-              disabled={!form.date || !form.label}
+              disabled={
+                !form.label ||
+                (form.isRange && !editing
+                  ? !form.dateFrom || !form.dateTo
+                  : !form.date)
+              }
             >
               Save
             </button>

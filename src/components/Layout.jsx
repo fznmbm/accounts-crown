@@ -7,16 +7,16 @@ import { useApp } from "../context/AppContext";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard" },
+  { to: "/attendance", label: "Attendance" },
+  { to: "/holidays", label: "Holiday Calendar" },
   { to: "/routes", label: "Routes" },
   { to: "/invoices", label: "Invoices" },
   { to: "/remittances", label: "Remittances" },
+  { to: "/allocations", label: "Allocations" },
   { to: "/staff", label: "Staff" },
   { to: "/payments", label: "Staff Payments" },
-  { to: "/reports", label: "Reports" },
-  { to: "/allocations", label: "Allocations" },
   { to: "/staff-ledger", label: "Staff Ledger" },
-  { to: "/attendance", label: "Attendance" },
-  { to: "/holidays", label: "Holiday Calendar" },
+  { to: "/reports", label: "Reports" },
   { to: "/audit", label: "Audit Log" },
 ];
 
