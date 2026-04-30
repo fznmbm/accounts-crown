@@ -1,12 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useApp, DEFAULT_SETTINGS } from "../context/AppContext";
 import { CONFIG } from "../config";
 import PageHeader from "../components/PageHeader";
 import { FormField, FormGrid } from "../components/Modal";
 //import { uid } from "../lib/utils";
 import DocumentUploader from "../components/DocumentUploader";
-import { useAuth } from "../context/AuthContext";
-import { supabase } from "../lib/supabase";
 
 // function MigrateButton() {
 //   const {
@@ -130,63 +128,6 @@ export default function Settings() {
   const [form, setForm] = useState({ ...DEFAULT_SETTINGS, ...settings });
   const [saved, setSaved] = useState(false);
   const [newAuthority, setNewAuthority] = useState("");
-  const { user, isOwner } = useAuth();
-  const [members, setMembers] = useState([]);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteStatus, setInviteStatus] = useState("");
-  const [membersLoading, setMembersLoading] = useState(true);
-
-  useEffect(() => {
-    if (!isOwner) return;
-    supabase
-      .from("workspace_members")
-      .select("*")
-      .eq("owner_user_id", user.id)
-      .then(({ data }) => {
-        setMembers(data || []);
-        setMembersLoading(false);
-      });
-  }, [isOwner]);
-
-  const inviteMember = async () => {
-    if (!inviteEmail.trim()) return;
-    const email = inviteEmail.trim().toLowerCase();
-    const existing = members.find((m) => m.member_email === email);
-    if (existing) {
-      setInviteStatus("already");
-      return;
-    }
-    setInviteStatus("sending");
-    try {
-      const { error } = await supabase.from("workspace_members").insert({
-        owner_user_id: user.id,
-        member_user_id: user.id,
-        member_email: email,
-        role: "member",
-        created_at: Date.now(),
-      });
-      if (error) throw error;
-      setMembers((p) => [
-        ...p,
-        { owner_user_id: user.id, member_email: email, role: "member" },
-      ]);
-      setInviteEmail("");
-      setInviteStatus("sent");
-      setTimeout(() => setInviteStatus(""), 4000);
-    } catch (err) {
-      setInviteStatus("error:" + (err.message || "Failed"));
-    }
-  };
-
-  const removeMember = async (email) => {
-    if (!confirm(`Remove ${email} from your team?`)) return;
-    await supabase
-      .from("workspace_members")
-      .delete()
-      .eq("owner_user_id", user.id)
-      .eq("member_email", email);
-    setMembers((p) => p.filter((m) => m.member_email !== email));
-  };
   const [newTrainingName, setNewTrainingName] = useState("");
   const [newTrainingYears, setNewTrainingYears] = useState(3);
 
@@ -227,8 +168,8 @@ export default function Settings() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-6 pb-6">
-        <div className="max-w-3xl mx-auto space-y-6">
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-2xl space-y-6">
           {/* Company info */}
           <div className="card p-5 space-y-4">
             <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
@@ -608,101 +549,6 @@ export default function Settings() {
           </div>
 
           {/* Data management */}
-
-          {/* Team members */}
-          {isOwner && (
-            <div className="card p-5 space-y-4">
-              <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
-                Team members
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Add team members who need access. After adding, share the signup
-                link with them — they sign up with the exact email you entered
-                and will automatically see your data.
-              </p>
-
-              {/* Current members */}
-              {membersLoading ? (
-                <p className="text-xs text-gray-400 dark:text-gray-500">
-                  Loading…
-                </p>
-              ) : members.length === 0 ? (
-                <p className="text-xs text-gray-400 dark:text-gray-500 italic">
-                  No team members added yet.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {members.map((m, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-xs font-bold text-blue-700 dark:text-blue-400">
-                          {m.member_email[0].toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-900 dark:text-gray-100">
-                            {m.member_email}
-                          </p>
-                          <p className="text-xs text-gray-400 dark:text-gray-500 capitalize">
-                            {m.role}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => removeMember(m.member_email)}
-                        className="text-xs text-red-500 dark:text-red-400 hover:underline"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Invite form */}
-              <div className="flex gap-2 pt-1">
-                <input
-                  className="input flex-1"
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="office@example.com"
-                  onKeyDown={(e) => e.key === "Enter" && inviteMember()}
-                />
-                <button
-                  className="btn-secondary text-sm"
-                  onClick={inviteMember}
-                >
-                  + Add
-                </button>
-              </div>
-              {inviteStatus === "sent" && (
-                <p className="text-xs text-green-600 dark:text-green-400">
-                  ✓ Team member added. They can now sign up with this email.
-                </p>
-              )}
-              {inviteStatus === "already" && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  ⚠ This email is already in your team.
-                </p>
-              )}
-              {inviteStatus.startsWith("error") && (
-                <p className="text-xs text-red-500 dark:text-red-400">
-                  {inviteStatus.replace("error:", "")}
-                </p>
-              )}
-
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-700 dark:text-blue-400">
-                ℹ After adding, share the signup link with your team member:{" "}
-                <span className="font-mono">
-                  {window.location.origin}/signup
-                </span>
-                . They must sign up with the exact email address you entered.
-              </div>
-            </div>
-          )}
 
           {/* Data management */}
           <div className="card p-5 space-y-4">

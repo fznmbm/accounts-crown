@@ -5,20 +5,52 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [effectiveUserId, setEffectiveUserId] = useState(null); // owner's ID
+  const [isOwner, setIsOwner] = useState(true);
   const [loading, setLoading] = useState(true);
 
+  // Resolve workspace: am I an owner or a member of someone else's workspace?
+  const resolveWorkspace = async (authUser) => {
+    if (!authUser) {
+      setEffectiveUserId(null);
+      setIsOwner(true);
+      return;
+    }
+    // Check by email first (handles newly signed up members)
+    const { data } = await supabase
+      .from("workspace_members")
+      .select("owner_user_id, id")
+      .eq("member_email", authUser.email.toLowerCase())
+      .maybeSingle();
+
+    if (data?.owner_user_id && data.owner_user_id !== authUser.id) {
+      // Update member_user_id to actual UUID on first login
+      await supabase
+        .from("workspace_members")
+        .update({ member_user_id: authUser.id })
+        .eq("id", data.id);
+      setEffectiveUserId(data.owner_user_id);
+      setIsOwner(false);
+    } else {
+      setEffectiveUserId(authUser.id);
+      setIsOwner(true);
+    }
+  };
+
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      const u = session?.user ?? null;
+      setUser(u);
+      await resolveWorkspace(u);
       setLoading(false);
     });
 
-    // Listen for login/logout
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const u = session?.user ?? null;
+      setUser(u);
+      await resolveWorkspace(u);
     });
 
     return () => subscription.unsubscribe();
@@ -32,8 +64,30 @@ export function AuthProvider({ children }) {
     if (error) throw error;
   };
 
+  const signup = async (email, password, companyName) => {
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+    // Store company name in user metadata
+    if (companyName && data.user) {
+      await supabase.auth.updateUser({ data: { company_name: companyName } });
+    }
+    return data;
+  };
+
   const logout = async () => {
     await supabase.auth.signOut();
+  };
+
+  const resetPassword = async (email) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) throw error;
+  };
+
+  const updatePassword = async (newPassword) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
   };
 
   if (loading) {
@@ -45,7 +99,18 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        effectiveUserId,
+        isOwner,
+        login,
+        signup,
+        logout,
+        resetPassword,
+        updatePassword,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

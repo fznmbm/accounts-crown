@@ -23,6 +23,9 @@ import Apply from "./pages/Apply";
 import Applications from "./pages/Applications";
 import StaffPortal from "./pages/StaffPortal";
 import InvoiceSubmissions from "./pages/InvoiceSubmissions";
+import Signup from "./pages/Signup";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 function ProtectedRoutes() {
   const { user } = useAuth();
@@ -91,6 +94,9 @@ export default function App() {
         <Routes>
           <Route path="/apply" element={<Apply />} />
           <Route path="/staff/:token" element={<StaffPortal />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/*" element={<ProtectedRoutes />} />
         </Routes>
       </BrowserRouter>

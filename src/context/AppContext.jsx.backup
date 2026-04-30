@@ -674,7 +674,7 @@ async function syncSettings(data, userId) {
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
-  const { user, effectiveUserId } = useAuth();
+  const { user } = useAuth();
 
   const [routes, setRawRoutes] = useState([]);
   const [invoices, setRawInvoices] = useState([]);
@@ -699,13 +699,10 @@ export function AppProvider({ children }) {
   const hasLoadedRef = useRef(false);
 
   useEffect(() => {
-    if (!effectiveUserId) {
-      hasLoadedRef.current = false;
-      return;
-    }
-    if (hasLoadedRef.current) return;
+    if (!user) return;
+    if (hasLoadedRef.current) return; // prevent re-run on token refresh
     hasLoadedRef.current = true;
-    const uid = effectiveUserId;
+    const uid = user.id;
 
     async function loadAll() {
       setLoading(true);
@@ -836,12 +833,12 @@ export function AppProvider({ children }) {
       .subscribe();
 
     return () => supabase.removeChannel(channel);
-  }, [effectiveUserId]);
+  }, [user]);
 
   // ── Setters — update state + sync to Supabase ──────────────────────────────
   const setRoutes = async (data, audit) => {
     setRawRoutes(data);
-    await syncTable("routes", data, routeToDb, effectiveUserId);
+    await syncTable("routes", data, routeToDb, user.id);
     if (audit)
       await addAuditEntry(
         audit.action,
@@ -853,7 +850,7 @@ export function AppProvider({ children }) {
   };
   const setInvoices = async (data, audit) => {
     setRawInvoices(data);
-    await syncTable("invoices", data, invoiceToDb, effectiveUserId);
+    await syncTable("invoices", data, invoiceToDb, user.id);
     if (audit)
       await addAuditEntry(
         audit.action,
@@ -865,7 +862,7 @@ export function AppProvider({ children }) {
   };
   const setStaff = async (data, audit) => {
     setRawStaff(data);
-    await syncTable("staff", data, staffToDb, effectiveUserId);
+    await syncTable("staff", data, staffToDb, user.id);
     if (audit)
       await addAuditEntry(
         audit.action,
@@ -877,7 +874,7 @@ export function AppProvider({ children }) {
   };
   const setPayments = async (data, audit) => {
     setRawPayments(data);
-    await syncTable("payments", data, paymentToDb, effectiveUserId);
+    await syncTable("payments", data, paymentToDb, user.id);
     if (audit)
       await addAuditEntry(
         audit.action,
@@ -889,30 +886,30 @@ export function AppProvider({ children }) {
   };
   const setRemittances = async (data) => {
     setRawRemittances(data);
-    await syncTable("remittances", data, remittanceToDb, effectiveUserId);
+    await syncTable("remittances", data, remittanceToDb, user.id);
   };
 
   const setAllocations = async (data) => {
     setRawAllocations(data);
-    await syncTable("allocations", data, allocationToDb, effectiveUserId);
+    await syncTable("allocations", data, allocationToDb, user.id);
   };
   const setPoHistory = async (data) => {
     setRawPoHistory(data);
-    await syncTable("po_history", data, poHistoryToDb, effectiveUserId);
+    await syncTable("po_history", data, poHistoryToDb, user.id);
   };
 
   const setPupils = async (data) => {
     setRawPupils(data);
-    await syncTable("children", data, childToDb, effectiveUserId);
+    await syncTable("children", data, childToDb, user.id);
   };
 
   const setAttendance = async (data) => {
     setRawAttendance(data);
     if (data.length === 0) {
-      await supabase.from("attendance").delete().eq("user_id", effectiveUserId);
+      await supabase.from("attendance").delete().eq("user_id", user.id);
       return;
     }
-    const rows = data.map((a) => attendanceToDb(a, effectiveUserId));
+    const rows = data.map((a) => attendanceToDb(a, user.id));
     const chunkSize = 50;
     for (let i = 0; i < rows.length; i += chunkSize) {
       const chunk = rows.slice(i, i + chunkSize);
@@ -930,43 +927,33 @@ export function AppProvider({ children }) {
         .from("attendance")
         .delete()
         .eq("id", id)
-        .eq("user_id", effectiveUserId);
+        .eq("user_id", user.id);
     }
   };
 
   const setHolidays = async (data) => {
     setRawHolidays(data);
-    await syncTable("school_holidays", data, holidayToDb, effectiveUserId);
+    await syncTable("school_holidays", data, holidayToDb, user.id);
   };
 
   const setStaffLicences = async (data) => {
     setRawStaffLicences(data);
-    await syncTable("staff_licences", data, staffLicenceToDb, effectiveUserId);
+    await syncTable("staff_licences", data, staffLicenceToDb, user.id);
   };
 
   const setStaffTraining = async (data) => {
     setRawStaffTraining(data);
-    await syncTable("staff_training", data, staffTrainingToDb, effectiveUserId);
+    await syncTable("staff_training", data, staffTrainingToDb, user.id);
   };
 
   const setPortalTokens = async (data) => {
     setRawPortalTokens(data);
-    await syncTable(
-      "staff_portal_tokens",
-      data,
-      portalTokenToDb,
-      effectiveUserId,
-    );
+    await syncTable("staff_portal_tokens", data, portalTokenToDb, user.id);
   };
 
   const setSubmissions = async (data) => {
     setRawSubmissions(data);
-    await syncTable(
-      "staff_invoice_submissions",
-      data,
-      submissionToDb,
-      effectiveUserId,
-    );
+    await syncTable("staff_invoice_submissions", data, submissionToDb, user.id);
   };
 
   const setApplications = async (data) => {
@@ -982,7 +969,7 @@ export function AppProvider({ children }) {
     }
     // Upsert remaining
     if (data.length === 0) return;
-    const rows = data.map((a) => applicationToDb(a, effectiveUserId));
+    const rows = data.map((a) => applicationToDb(a, user.id));
     const { error } = await supabase
       .from("staff_applications")
       .upsert(rows, { onConflict: "id" });
@@ -1007,11 +994,11 @@ export function AppProvider({ children }) {
     };
     const newLog = [entry, ...auditLog];
     setRawAuditLog(newLog);
-    await supabase.from("audit_log").insert(auditToDb(entry, effectiveUserId));
+    await supabase.from("audit_log").insert(auditToDb(entry, user.id));
   };
   const setSettings = async (data) => {
     setRawSettings(data);
-    await syncSettings(data, effectiveUserId);
+    await syncSettings(data, user.id);
   };
 
   if (loading) {

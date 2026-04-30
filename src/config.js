@@ -11,7 +11,9 @@ export const CONFIG = {
   primaryColour: "#1d4ed8", // Brand colour (hex) — used in sidebar + buttons
   councilName: "West Sussex County Council",
   supplierNumber: "103820", // or Vendor number
-  ownerUserId: "3c75d949-0c40-4f0b-9b51-992686e0fe1b", // ← add this
+  ownerUserId:
+    import.meta.env.VITE_OWNER_USER_ID ||
+    "3c75d949-0c40-4f0b-9b51-992686e0fe1b",
 
   // ── Licence key ──────────────────────────────────────────────
   // DO NOT share this key. Unique per client deployment.
