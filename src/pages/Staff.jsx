@@ -5,6 +5,7 @@ import Modal, { FormField, FormGrid, ModalFooter } from "../components/Modal";
 import Badge from "../components/Badge";
 import EmptyState from "../components/EmptyState";
 import { uid, fmt } from "../lib/utils";
+import DocumentUploader from "../components/DocumentUploader";
 
 const TYPES = [
   { value: "driver", label: "Driver" },
@@ -22,6 +23,7 @@ const EMPTY = {
   nationality: "",
   address: "",
   notes: "",
+  documents: [],
 };
 
 export default function Staff() {
@@ -419,6 +421,13 @@ export default function Staff() {
                 placeholder="Routes, cover arrangements…"
               />
             </FormField>
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
+              <p className="label mb-2">📎 Documents</p>
+              <DocumentUploader
+                documents={form.documents || []}
+                onChange={(docs) => setForm((p) => ({ ...p, documents: docs }))}
+              />
+            </div>
           </div>
           <ModalFooter>
             <button className="btn-secondary" onClick={close}>

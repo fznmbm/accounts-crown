@@ -22,6 +22,6 @@ export const CONFIG = {
   supabaseAnon: import.meta.env.VITE_SUPABASE_ANON_KEY,
 
   // ── Google Drive ──────────────────────────────────────────────
-  googleApiKey: import.meta.env.VITE_GOOGLE_API_KEY,
-  googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+  // googleApiKey: import.meta.env.VITE_GOOGLE_API_KEY,
+  // googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID,
 };

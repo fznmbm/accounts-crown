@@ -14,6 +14,8 @@ export const DEFAULT_SETTINGS = {
   sortCode: "30-99-50",
   supplierNumber: "103820",
   vatRate: 20,
+  cloudinaryCloudName: "",
+  cloudinaryUploadPreset: "",
   licensingAuthorities: [
     "Crawley",
     "Mid Sussex",
@@ -141,6 +143,7 @@ const staffFromDb = (s) => ({
   accountNo: s.account_no,
   sortCode: s.sort_code,
   notes: s.notes,
+  documents: s.documents || [],
   createdAt: s.created_at,
 });
 const staffToDb = (s, uid) => ({
@@ -157,8 +160,9 @@ const staffToDb = (s, uid) => ({
   address: s.address || null,
   bank_name: s.bankName || null,
   account_no: s.accountNo || null,
-  sort_code: s.sortCode || null,
+  sort_code: s.sortCode,
   notes: s.notes,
+  documents: s.documents || [],
   created_at: s.createdAt,
 });
 
@@ -790,6 +794,45 @@ export function AppProvider({ children }) {
     }
 
     loadAll();
+
+    // ── Realtime: auto-refresh submissions when drivers submit ──────────
+    const channel = supabase
+      .channel("realtime-watch")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "staff_invoice_submissions",
+          filter: `user_id=eq.${uid}`,
+        },
+        async () => {
+          const { data } = await supabase
+            .from("staff_invoice_submissions")
+            .select("*")
+            .eq("user_id", uid);
+          setRawSubmissions((data || []).map(submissionFromDb));
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "staff_applications",
+          filter: `target_user_id=eq.${uid}`,
+        },
+        async () => {
+          const { data } = await supabase
+            .from("staff_applications")
+            .select("*")
+            .eq("target_user_id", uid);
+          setRawApplications((data || []).map(applicationFromDb));
+        },
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
   }, [user]);
 
   // ── Setters — update state + sync to Supabase ──────────────────────────────
@@ -915,6 +958,16 @@ export function AppProvider({ children }) {
 
   const setApplications = async (data) => {
     setRawApplications(data);
+    // Find deleted records by comparing with current state
+    const currentIds = new Set(data.map((a) => a.id));
+    const deletedIds = applications
+      .filter((a) => !currentIds.has(a.id))
+      .map((a) => a.id);
+    // Delete removed records by id
+    for (const id of deletedIds) {
+      await supabase.from("staff_applications").delete().eq("id", id);
+    }
+    // Upsert remaining
     if (data.length === 0) return;
     const rows = data.map((a) => applicationToDb(a, user.id));
     const { error } = await supabase

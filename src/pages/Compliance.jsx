@@ -4,29 +4,7 @@ import PageHeader from "../components/PageHeader";
 import Modal, { FormField, FormGrid, ModalFooter } from "../components/Modal";
 import EmptyState from "../components/EmptyState";
 import { uid, fmtD } from "../lib/utils";
-
-const DEFAULT_TRAINING_TYPES = [
-  "Safeguarding",
-  "Disability Awareness",
-  "Challenging Behaviour",
-];
-
-const AUTHORITIES = [
-  "Crawley",
-  "Mid Sussex",
-  "Reigate & Banstead",
-  "Horsham",
-  "Worthing",
-  "Adur",
-  "Arun",
-  "Chichester",
-  "Eastbourne",
-  "Hastings",
-  "Lewes",
-  "Rother",
-  "Wealden",
-  "Other",
-];
+import DocumentUploader from "../components/DocumentUploader";
 
 // ── Expiry helpers ────────────────────────────────────────────────────────────
 function getExpiryStatus(dateStr) {
@@ -733,6 +711,25 @@ export default function Compliance() {
                         </div>
                       </div>
 
+                      {/* Documents */}
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
+                          📎 Documents
+                        </p>
+                        <DocumentUploader
+                          compact
+                          documents={l.documents || []}
+                          onChange={(docs) => {
+                            const updated = { ...l, documents: docs };
+                            setStaffLicences(
+                              staffLicences.map((x) =>
+                                x.id === l.id ? updated : x,
+                              ),
+                            );
+                          }}
+                        />
+                      </div>
+
                       {l.notes && (
                         <p className="text-xs text-gray-500 dark:text-gray-400 italic">
                           {l.notes}
@@ -895,10 +892,19 @@ export default function Compliance() {
                                   <a
                                     href={t.certificateUrl}
                                     target="_blank"
-                                    rel="noreferrer"
+                                    rel="noreferrer noopener"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(
+                                        t.certificateUrl,
+                                        "_blank",
+                                        "noopener,noreferrer",
+                                      );
+                                      e.preventDefault();
+                                    }}
                                     className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
                                   >
-                                    View
+                                    View ↗
                                   </a>
                                 ) : (
                                   <span className="text-xs text-gray-400 dark:text-gray-500">
@@ -1050,6 +1056,15 @@ export default function Compliance() {
               </FormGrid>
             </div>
 
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
+              <p className="label mb-2">📎 Documents</p>
+              <DocumentUploader
+                documents={licForm.documents || []}
+                onChange={(docs) =>
+                  setLicForm((p) => ({ ...p, documents: docs }))
+                }
+              />
+            </div>
             <FormField label="Notes">
               <input
                 className="input"
@@ -1132,17 +1147,24 @@ export default function Compliance() {
                 })()}
               </div>
             )}
-            <FormField
-              label="Certificate URL"
-              hint="Paste a Google Drive link or any URL"
-            >
-              <input
-                className="input"
-                value={trnForm.certificateUrl}
-                onChange={tf("certificateUrl")}
-                placeholder="https://drive.google.com/…"
+            <div>
+              <p className="label mb-2">📎 Certificate</p>
+              <DocumentUploader
+                documents={
+                  trnForm.certificateUrl
+                    ? [{ url: trnForm.certificateUrl, name: "Certificate" }]
+                    : []
+                }
+                onChange={(docs) =>
+                  setTrnForm((p) => ({
+                    ...p,
+                    certificateUrl: docs[0]?.url || "",
+                  }))
+                }
+                maxFiles={1}
+                accept="image/jpeg,image/png,image/webp,.pdf"
               />
-            </FormField>
+            </div>
             <FormField label="Notes">
               <input
                 className="input"

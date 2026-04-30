@@ -109,6 +109,17 @@ export default function Applications() {
   const af = (k) => (e) =>
     setApproveForm((p) => ({ ...p, [k]: e.target.value }));
 
+  const del = (app) => {
+    if (
+      !confirm(
+        `Permanently delete ${app.fullName}'s application? This cannot be undone.`,
+      )
+    )
+      return;
+    setApplications(applications.filter((a) => a.id !== app.id));
+    if (viewing?.id === app.id) setViewing(null);
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader
@@ -212,25 +223,36 @@ export default function Applications() {
                     )}
                   </div>
 
-                  {app.status === "pending" && (
-                    <div
-                      className="flex gap-2 mt-3 ml-12"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        className="btn-primary text-xs py-1.5 px-3"
-                        onClick={() => openApprove(app)}
-                      >
-                        ✓ Approve & create staff
-                      </button>
+                  <div
+                    className="flex gap-2 mt-3 ml-12"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {app.status === "pending" && (
+                      <>
+                        <button
+                          className="btn-primary text-xs py-1.5 px-3"
+                          onClick={() => openApprove(app)}
+                        >
+                          ✓ Approve & create staff
+                        </button>
+                        <button
+                          className="btn-ghost text-xs py-1.5 px-3 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          onClick={() => reject(app)}
+                        >
+                          ✕ Reject
+                        </button>
+                      </>
+                    )}
+                    {(app.status === "rejected" ||
+                      app.status === "approved") && (
                       <button
                         className="btn-ghost text-xs py-1.5 px-3 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                        onClick={() => reject(app)}
+                        onClick={() => del(app)}
                       >
-                        ✕ Reject
+                        🗑 Delete
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -265,22 +287,33 @@ export default function Applications() {
                 </span>
               </div>
 
-              {viewing.status === "pending" && (
-                <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                {viewing.status === "pending" && (
+                  <>
+                    <button
+                      className="btn-primary text-xs flex-1"
+                      onClick={() => openApprove(viewing)}
+                    >
+                      ✓ Approve & create staff
+                    </button>
+                    <button
+                      className="btn-ghost text-xs text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      onClick={() => reject(viewing)}
+                    >
+                      ✕ Reject
+                    </button>
+                  </>
+                )}
+                {(viewing.status === "rejected" ||
+                  viewing.status === "approved") && (
                   <button
-                    className="btn-primary text-xs flex-1"
-                    onClick={() => openApprove(viewing)}
+                    className="btn-ghost text-xs text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 w-full"
+                    onClick={() => del(viewing)}
                   >
-                    ✓ Approve & create staff
+                    🗑 Delete application
                   </button>
-                  <button
-                    className="btn-ghost text-xs text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                    onClick={() => reject(viewing)}
-                  >
-                    ✕ Reject
-                  </button>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Personal */}
               <DetailSection title="Personal Information">

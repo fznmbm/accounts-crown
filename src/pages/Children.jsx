@@ -6,7 +6,7 @@ import Modal, { FormField, FormGrid, ModalFooter } from "../components/Modal";
 import Badge from "../components/Badge";
 import EmptyState from "../components/EmptyState";
 import { uid, fmtD } from "../lib/utils";
-import DriveFilePicker from "../components/DriveFilePicker";
+import DocumentUploader from "../components/DocumentUploader";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 const DAY_NUMS = [1, 2, 3, 4, 5];
@@ -459,6 +459,26 @@ export default function Children() {
                             )}
                           </div>
                         ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Documents */}
+                {p.documents?.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                    <p className="label mb-2">📎 Documents</p>
+                    <div className="flex flex-wrap gap-2">
+                      {p.documents.map((doc, i) => (
+                        <a
+                          key={i}
+                          href={doc.url}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="inline-flex items-center gap-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400 px-2.5 py-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                        >
+                          📄 {doc.name || "Document"}
+                        </a>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -981,11 +1001,17 @@ export default function Children() {
                 />
               </FormField>
 
-              <DriveFilePicker
-                label="Care plan & supporting documents"
-                documents={form.documents || []}
-                onChange={(docs) => setForm((p) => ({ ...p, documents: docs }))}
-              />
+              <div>
+                <p className="label mb-2">
+                  📎 Care plan &amp; supporting documents
+                </p>
+                <DocumentUploader
+                  documents={form.documents || []}
+                  onChange={(docs) =>
+                    setForm((p) => ({ ...p, documents: docs }))
+                  }
+                />
+              </div>
             </div>
           )}
 

@@ -77,6 +77,10 @@ export default function InvoiceSubmissions() {
         (s) =>
           s.month === monthF && s.year === yearF && s.status === "rejected",
       ).length,
+      recalled: submissions.filter(
+        (s) =>
+          s.month === monthF && s.year === yearF && s.status === "recalled",
+      ).length,
     }),
     [submissions, monthF, yearF],
   );
@@ -209,18 +213,22 @@ export default function InvoiceSubmissions() {
                 </option>
               ))}
             </select>
-            {["all", "submitted", "approved", "rejected"].map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatusF(s)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium capitalize transition-colors ${statusF === s ? "bg-blue-600 text-white" : "btn-secondary"}`}
-              >
-                {s}{" "}
-                {s !== "all" && counts[s] > 0 && (
-                  <span className="ml-1 text-xs opacity-75">({counts[s]})</span>
-                )}
-              </button>
-            ))}
+            {["all", "submitted", "approved", "rejected", "recalled"].map(
+              (s) => (
+                <button
+                  key={s}
+                  onClick={() => setStatusF(s)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium capitalize transition-colors ${statusF === s ? "bg-blue-600 text-white" : "btn-secondary"}`}
+                >
+                  {s}{" "}
+                  {s !== "all" && counts[s] > 0 && (
+                    <span className="ml-1 text-xs opacity-75">
+                      ({counts[s]})
+                    </span>
+                  )}
+                </button>
+              ),
+            )}
           </div>
         }
       />

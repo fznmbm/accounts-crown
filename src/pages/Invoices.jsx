@@ -688,7 +688,18 @@ export default function Invoices() {
                 <select
                   className="input"
                   value={genMonth}
-                  onChange={(e) => setGenMonth(Number(e.target.value))}
+                  onChange={(e) => {
+                    const m = Number(e.target.value);
+                    setGenMonth(m);
+                    const preFilled = {};
+                    routes
+                      .filter((r) => r.active && !r.suspended)
+                      .forEach((r) => {
+                        const days = getAttendanceDays(r.id, m, genYear);
+                        if (days > 0) preFilled[r.id] = String(days);
+                      });
+                    setGenDays(preFilled);
+                  }}
                 >
                   {MONTHS.map((m, i) => (
                     <option key={i} value={i}>
@@ -701,7 +712,18 @@ export default function Invoices() {
                 <select
                   className="input"
                   value={genYear}
-                  onChange={(e) => setGenYear(Number(e.target.value))}
+                  onChange={(e) => {
+                    const y = Number(e.target.value);
+                    setGenYear(y);
+                    const preFilled = {};
+                    routes
+                      .filter((r) => r.active && !r.suspended)
+                      .forEach((r) => {
+                        const days = getAttendanceDays(r.id, genMonth, y);
+                        if (days > 0) preFilled[r.id] = String(days);
+                      });
+                    setGenDays(preFilled);
+                  }}
                 >
                   {YEARS.map((y) => (
                     <option key={y} value={y}>

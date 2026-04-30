@@ -6,7 +6,7 @@ import Modal, { FormField, FormGrid, ModalFooter } from "../components/Modal";
 import Badge from "../components/Badge";
 import EmptyState from "../components/EmptyState";
 import { uid, fmt } from "../lib/utils";
-import DriveFilePicker from "../components/DriveFilePicker";
+import DocumentUploader from "../components/DocumentUploader";
 
 const EMPTY = {
   number: "",
@@ -594,11 +594,16 @@ export default function Routes() {
                 </div>
               ))}
             </div>
-            <DriveFilePicker
-              label="Route documents (schedule, risk assessment, etc.)"
-              documents={form.documents || []}
-              onChange={(docs) => setForm((p) => ({ ...p, documents: docs }))}
-            />
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
+              <p className="label mb-3">📎 Route documents</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
+                Schedule, risk assessment, contract, etc.
+              </p>
+              <DocumentUploader
+                documents={form.documents || []}
+                onChange={(docs) => setForm((p) => ({ ...p, documents: docs }))}
+              />
+            </div>
 
             <FormField
               label="Operational days"

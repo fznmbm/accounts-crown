@@ -3,148 +3,117 @@ import { useApp, DEFAULT_SETTINGS } from "../context/AppContext";
 import { CONFIG } from "../config";
 import PageHeader from "../components/PageHeader";
 import { FormField, FormGrid } from "../components/Modal";
-import { uid } from "../lib/utils";
-import { openDrivePicker } from "../lib/googleDrive";
+//import { uid } from "../lib/utils";
+import DocumentUploader from "../components/DocumentUploader";
 
-function MigrateButton() {
-  const {
-    setRoutes,
-    setInvoices,
-    setStaff,
-    setPayments,
-    setRemittances,
-    setSettings,
-    routes,
-    invoices,
-    staff,
-    payments,
-    remittances,
-  } = useApp();
-  const [status, setStatus] = useState("");
-  const [running, setRunning] = useState(false);
+// function MigrateButton() {
+//   const {
+//     setRoutes,
+//     setInvoices,
+//     setStaff,
+//     setPayments,
+//     setRemittances,
+//     setSettings,
+//     routes,
+//     invoices,
+//     staff,
+//     payments,
+//     remittances,
+//   } = useApp();
+//   const [status, setStatus] = useState("");
+//   const [running, setRunning] = useState(false);
 
-  const migrate = async () => {
-    setRunning(true);
-    setStatus("Reading localStorage…");
-    try {
-      const lsRoutes = JSON.parse(localStorage.getItem("cc_routes_v2") || "[]");
-      const lsInvoices = JSON.parse(
-        localStorage.getItem("cc_invoices_v2") || "[]",
-      );
-      const lsStaff = JSON.parse(localStorage.getItem("cc_staff_v2") || "[]");
-      const lsPayments = JSON.parse(
-        localStorage.getItem("cc_payments_v2") || "[]",
-      );
-      const lsRemittances = JSON.parse(
-        localStorage.getItem("cc_remittances_v2") || "[]",
-      );
-      const lsSettings = JSON.parse(
-        localStorage.getItem("cc_settings_v1") || "null",
-      );
+//   const migrate = async () => {
+//     setRunning(true);
+//     setStatus("Reading localStorage…");
+//     try {
+//       const lsRoutes = JSON.parse(localStorage.getItem("cc_routes_v2") || "[]");
+//       const lsInvoices = JSON.parse(
+//         localStorage.getItem("cc_invoices_v2") || "[]",
+//       );
+//       const lsStaff = JSON.parse(localStorage.getItem("cc_staff_v2") || "[]");
+//       const lsPayments = JSON.parse(
+//         localStorage.getItem("cc_payments_v2") || "[]",
+//       );
+//       const lsRemittances = JSON.parse(
+//         localStorage.getItem("cc_remittances_v2") || "[]",
+//       );
+//       const lsSettings = JSON.parse(
+//         localStorage.getItem("cc_settings_v1") || "null",
+//       );
 
-      const total =
-        lsRoutes.length +
-        lsInvoices.length +
-        lsStaff.length +
-        lsPayments.length +
-        lsRemittances.length;
-      if (total === 0) {
-        setStatus("No localStorage data found — nothing to migrate.");
-        setRunning(false);
-        return;
-      }
+//       const total =
+//         lsRoutes.length +
+//         lsInvoices.length +
+//         lsStaff.length +
+//         lsPayments.length +
+//         lsRemittances.length;
+//       if (total === 0) {
+//         setStatus("No localStorage data found — nothing to migrate.");
+//         setRunning(false);
+//         return;
+//       }
 
-      setStatus(`Found ${total} records. Merging…`);
+//       setStatus(`Found ${total} records. Merging…`);
 
-      // Merge — skip duplicates by id
-      const existingRouteIds = new Set(routes.map((x) => x.id));
-      const existingInvoiceIds = new Set(invoices.map((x) => x.id));
-      const existingStaffIds = new Set(staff.map((x) => x.id));
-      const existingPaymentIds = new Set(payments.map((x) => x.id));
-      const existingRemittanceIds = new Set(remittances.map((x) => x.id));
+//       // Merge — skip duplicates by id
+//       const existingRouteIds = new Set(routes.map((x) => x.id));
+//       const existingInvoiceIds = new Set(invoices.map((x) => x.id));
+//       const existingStaffIds = new Set(staff.map((x) => x.id));
+//       const existingPaymentIds = new Set(payments.map((x) => x.id));
+//       const existingRemittanceIds = new Set(remittances.map((x) => x.id));
 
-      const newRoutes = lsRoutes.filter((x) => !existingRouteIds.has(x.id));
-      const newInvoices = lsInvoices.filter(
-        (x) => !existingInvoiceIds.has(x.id),
-      );
-      const newStaff = lsStaff.filter((x) => !existingStaffIds.has(x.id));
-      const newPayments = lsPayments.filter(
-        (x) => !existingPaymentIds.has(x.id),
-      );
-      const newRemittances = lsRemittances.filter(
-        (x) => !existingRemittanceIds.has(x.id),
-      );
+//       const newRoutes = lsRoutes.filter((x) => !existingRouteIds.has(x.id));
+//       const newInvoices = lsInvoices.filter(
+//         (x) => !existingInvoiceIds.has(x.id),
+//       );
+//       const newStaff = lsStaff.filter((x) => !existingStaffIds.has(x.id));
+//       const newPayments = lsPayments.filter(
+//         (x) => !existingPaymentIds.has(x.id),
+//       );
+//       const newRemittances = lsRemittances.filter(
+//         (x) => !existingRemittanceIds.has(x.id),
+//       );
 
-      setStatus("Saving to Supabase…");
+//       setStatus("Saving to Supabase…");
 
-      if (newRoutes.length) await setRoutes([...routes, ...newRoutes]);
-      if (newInvoices.length) await setInvoices([...invoices, ...newInvoices]);
-      if (newStaff.length) await setStaff([...staff, ...newStaff]);
-      if (newPayments.length) await setPayments([...payments, ...newPayments]);
-      if (newRemittances.length)
-        await setRemittances([...remittances, ...newRemittances]);
-      if (lsSettings) await setSettings(lsSettings);
+//       if (newRoutes.length) await setRoutes([...routes, ...newRoutes]);
+//       if (newInvoices.length) await setInvoices([...invoices, ...newInvoices]);
+//       if (newStaff.length) await setStaff([...staff, ...newStaff]);
+//       if (newPayments.length) await setPayments([...payments, ...newPayments]);
+//       if (newRemittances.length)
+//         await setRemittances([...remittances, ...newRemittances]);
+//       if (lsSettings) await setSettings(lsSettings);
 
-      setStatus(
-        `✓ Migrated: ${newRoutes.length} routes, ${newInvoices.length} invoices, ` +
-          `${newStaff.length} staff, ${newPayments.length} payments, ${newRemittances.length} remittances.`,
-      );
-    } catch (e) {
-      setStatus("Error: " + e.message);
-    }
-    setRunning(false);
-  };
+//       setStatus(
+//         `✓ Migrated: ${newRoutes.length} routes, ${newInvoices.length} invoices, ` +
+//           `${newStaff.length} staff, ${newPayments.length} payments, ${newRemittances.length} remittances.`,
+//       );
+//     } catch (e) {
+//       setStatus("Error: " + e.message);
+//     }
+//     setRunning(false);
+//   };
 
-  return (
-    <div className="space-y-2">
-      <button
-        className="btn-secondary text-sm"
-        onClick={migrate}
-        disabled={running}
-      >
-        {running ? "Migrating…" : "↑ Migrate localStorage → Supabase"}
-      </button>
-      {status && (
-        <p
-          className={`text-xs ${status.startsWith("✓") ? "text-green-600 dark:text-green-400" : "text-amber-700 dark:text-amber-400"}`}
-        >
-          {status}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function DriveLogoUploader({ currentUrl, onChange }) {
-  const [loading, setLoading] = useState(false);
-
-  const pick = async () => {
-    setLoading(true);
-    try {
-      await openDrivePicker({
-        onPicked: (file) => {
-          const directUrl = `https://drive.google.com/uc?export=view&id=${file.id}`;
-          onChange(directUrl);
-        },
-        mimeTypes: "image/jpeg,image/png,image/webp,image/svg+xml",
-      });
-    } catch (e) {
-      console.error(e);
-    }
-    setLoading(false);
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={pick}
-      disabled={loading}
-      className="btn-secondary text-sm"
-    >
-      {loading ? "Opening Drive…" : "↑ Upload from Google Drive"}
-    </button>
-  );
-}
+//   return (
+//     <div className="space-y-2">
+//       <button
+//         className="btn-secondary text-sm"
+//         onClick={migrate}
+//         disabled={running}
+//       >
+//         {running ? "Migrating…" : "↑ Migrate localStorage → Supabase"}
+//       </button>
+//       {status && (
+//         <p
+//           className={`text-xs ${status.startsWith("✓") ? "text-green-600 dark:text-green-400" : "text-amber-700 dark:text-amber-400"}`}
+//         >
+//           {status}
+//         </p>
+//       )}
+//     </div>
+//   );
+// }
 
 export default function Settings() {
   const {
@@ -280,12 +249,16 @@ export default function Settings() {
                 )}
               </div>
               <div className="flex-1 space-y-3">
-                {/* Upload via Google Drive */}
-                <DriveLogoUploader
-                  currentUrl={form.logoUrl}
-                  onChange={(url) => setForm((p) => ({ ...p, logoUrl: url }))}
+                <DocumentUploader
+                  documents={
+                    form.logoUrl ? [{ url: form.logoUrl, name: "Logo" }] : []
+                  }
+                  onChange={(docs) =>
+                    setForm((p) => ({ ...p, logoUrl: docs[0]?.url || "" }))
+                  }
+                  maxFiles={1}
+                  accept="image/jpeg,image/png,image/webp,image/svg+xml"
                 />
-                {/* Or paste URL directly */}
                 <FormField label="Or paste image URL directly">
                   <input
                     className="input text-sm"
@@ -293,7 +266,7 @@ export default function Settings() {
                     onChange={(e) =>
                       setForm((p) => ({ ...p, logoUrl: e.target.value }))
                     }
-                    placeholder="https://drive.google.com/uc?id=..."
+                    placeholder="https://res.cloudinary.com/..."
                   />
                 </FormField>
                 {form.logoUrl && (
@@ -529,26 +502,59 @@ export default function Settings() {
             </div>
           </div>
 
+          {/* Cloudinary file storage */}
+          <div className="card p-5 space-y-4">
+            <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
+              File storage (Cloudinary)
+            </h2>
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-700 dark:text-blue-400 space-y-1">
+              <p className="font-semibold">Setup instructions:</p>
+              <p>
+                1. Create a free account at{" "}
+                <span className="font-mono">cloudinary.com</span> (25GB free)
+              </p>
+              <p>
+                2. Go to Settings → Upload → Add upload preset → set to{" "}
+                <strong>Unsigned</strong>
+              </p>
+              <p>3. Copy your Cloud Name and Upload Preset name below</p>
+            </div>
+            <FormGrid cols={2}>
+              <FormField label="Cloud name" hint="e.g. my-taxi-company">
+                <input
+                  className="input font-mono"
+                  value={form.cloudinaryCloudName || ""}
+                  onChange={f("cloudinaryCloudName")}
+                  placeholder="your-cloud-name"
+                />
+              </FormField>
+              <FormField label="Upload preset" hint="Must be set to Unsigned">
+                <input
+                  className="input font-mono"
+                  value={form.cloudinaryUploadPreset || ""}
+                  onChange={f("cloudinaryUploadPreset")}
+                  placeholder="your-upload-preset"
+                />
+              </FormField>
+            </FormGrid>
+            {form.cloudinaryCloudName && form.cloudinaryUploadPreset ? (
+              <p className="text-xs text-green-600 dark:text-green-400 font-medium">
+                ✓ Cloudinary configured — file uploads are enabled
+              </p>
+            ) : (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                ⚠ File uploads disabled until Cloudinary is configured
+              </p>
+            )}
+          </div>
+
+          {/* Data management */}
+
           {/* Data management */}
           <div className="card p-5 space-y-4">
             <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
               Data
             </h2>
-
-            {/* localStorage migration */}
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 space-y-3">
-              <div>
-                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                  Migrate data from local storage
-                </p>
-                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-                  If you used the app before Supabase was set up, your old data
-                  is still in this browser's localStorage. Click below to
-                  migrate it to the cloud.
-                </p>
-              </div>
-              <MigrateButton />
-            </div>
 
             {/* Export backup */}
             <div>
