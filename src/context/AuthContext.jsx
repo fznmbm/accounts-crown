@@ -76,6 +76,9 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     await supabase.auth.signOut();
+    setUser(null);
+    setEffectiveUserId(null);
+    setIsOwner(true);
   };
 
   const resetPassword = async (email) => {

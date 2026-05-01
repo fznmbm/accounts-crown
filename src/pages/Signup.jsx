@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { CONFIG } from "../config";
 import { Link, useNavigate } from "react-router-dom";
+import { supabase } from "../lib/supabase";
 
 export default function Signup() {
   const { signup } = useAuth();
@@ -17,6 +18,17 @@ export default function Signup() {
   const [done, setDone] = useState(false);
 
   const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
+  const [isMember, setIsMember] = useState(false);
+
+  const checkIfMember = async (email) => {
+    if (!email || !email.includes("@")) return;
+    const { data } = await supabase
+      .from("workspace_members")
+      .select("id")
+      .eq("member_email", email.toLowerCase())
+      .maybeSingle();
+    setIsMember(!!data);
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -83,16 +95,23 @@ export default function Signup() {
             Create your account
           </h1>
           <form onSubmit={submit} className="space-y-4">
-            <div className="space-y-1">
-              <label className="label">Company name</label>
-              <input
-                className="input"
-                value={form.companyName}
-                onChange={f("companyName")}
-                placeholder="e.g. Crown Cars Ltd"
-                required
-              />
-            </div>
+            {!isMember && (
+              <div className="space-y-1">
+                <label className="label">Company name</label>
+                <input
+                  className="input"
+                  value={form.companyName}
+                  onChange={f("companyName")}
+                  placeholder="e.g. XYZ Transport Ltd"
+                />
+              </div>
+            )}
+            {isMember && (
+              <div className="p-3 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-lg text-xs text-green-700 dark:text-green-400">
+                ✓ You've been invited to join a team. Complete signup to access
+                the system.
+              </div>
+            )}
             <div className="space-y-1">
               <label className="label">Email</label>
               <input
@@ -100,6 +119,7 @@ export default function Signup() {
                 type="email"
                 value={form.email}
                 onChange={f("email")}
+                onBlur={(e) => checkIfMember(e.target.value)}
                 placeholder="you@example.com"
                 required
               />
