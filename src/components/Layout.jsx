@@ -170,15 +170,7 @@ export default function Layout() {
               {user?.email}
             </p>
             <button
-              onClick={async () => {
-                try {
-                  await logout();
-                } catch (e) {
-                  console.error("Logout error:", e);
-                  // Force reload as fallback
-                  window.location.href = "/";
-                }
-              }}
+              onClick={logout}
               className="w-full text-left text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors"
             >
               Sign out

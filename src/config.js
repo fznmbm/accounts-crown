@@ -13,7 +13,7 @@ export const CONFIG = {
   supplierNumber: "103820", // or Vendor number
   ownerUserId:
     import.meta.env.VITE_OWNER_USER_ID ||
-    "3c75d949-0c40-4f0b-9b51-992686e0fe1b",
+    "f3cf0783-92e2-4269-a7e1-e9b3db6203a3",
 
   // ── Licence key ──────────────────────────────────────────────
   // DO NOT share this key. Unique per client deployment.

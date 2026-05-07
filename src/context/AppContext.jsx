@@ -667,9 +667,11 @@ async function syncTable(table, data, toDb, userId) {
 }
 
 async function syncSettings(data, userId) {
-  await supabase.from("settings").upsert({ id: userId, user_id: userId, data });
+  const { error } = await supabase
+    .from("settings")
+    .upsert({ id: userId, user_id: userId, data });
+  if (error) console.error("syncSettings error:", error);
 }
-
 // ── Context ──────────────────────────────────────────────────────────────────
 const AppContext = createContext(null);
 
@@ -739,6 +741,7 @@ export function AppProvider({ children }) {
         setRawStaff((st.data || []).map(staffFromDb));
         setRawPayments((pay.data || []).map(paymentFromDb));
         setRawRemittances((rem.data || []).map(remittanceFromDb));
+
         setRawSettings(sett.data?.data || DEFAULT_SETTINGS);
         setRawAllocations((alloc.data || []).map(allocationFromDb));
         setRawPoHistory((poh.data || []).map(poHistoryFromDb));
@@ -797,8 +800,62 @@ export function AppProvider({ children }) {
     }
 
     loadAll();
+  }, [effectiveUserId]);
 
-    // ── Realtime: auto-refresh submissions when drivers submit ──────────
+  // ── Polling + realtime in separate effect (always runs, no hasLoadedRef guard) ──
+  useEffect(() => {
+    if (!effectiveUserId) return;
+    const uid = effectiveUserId;
+
+    // Read token directly from localStorage — bypasses GoTrue lock entirely
+    const getToken = () => {
+      const key = Object.keys(localStorage).find(
+        (k) => k.startsWith("sb-") && k.endsWith("-auth-token"),
+      );
+      if (!key) return null;
+      try {
+        return JSON.parse(localStorage.getItem(key))?.access_token;
+      } catch {
+        return null;
+      }
+    };
+
+    const base = import.meta.env.VITE_SUPABASE_URL;
+    const apikey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    const poll = () => {
+      const token = getToken();
+      if (!token) return;
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        apikey,
+        "Content-Type": "application/json",
+      };
+
+      fetch(
+        `${base}/rest/v1/staff_invoice_submissions?user_id=eq.${uid}&select=*&order=created_at.desc`,
+        { headers },
+      )
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data))
+            setRawSubmissions(data.map(submissionFromDb));
+        })
+        .catch(() => {});
+
+      fetch(
+        `${base}/rest/v1/staff_applications?target_user_id=eq.${uid}&select=*&order=created_at.desc`,
+        { headers },
+      )
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data))
+            setRawApplications(data.map(applicationFromDb));
+        })
+        .catch(() => {});
+    };
+
+    const pollInterval = setInterval(poll, 30000); // 30 seconds
     const channel = supabase
       .channel("realtime-watch")
       .on(
@@ -835,7 +892,10 @@ export function AppProvider({ children }) {
       )
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      clearInterval(pollInterval);
+      supabase.removeChannel(channel);
+    };
   }, [effectiveUserId]);
 
   // ── Setters — update state + sync to Supabase ──────────────────────────────

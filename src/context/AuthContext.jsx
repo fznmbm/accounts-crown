@@ -53,7 +53,44 @@ export function AuthProvider({ children }) {
       await resolveWorkspace(u);
     });
 
-    return () => subscription.unsubscribe();
+    // Active session check every 30 seconds
+    // Handles case where user is deleted server-side but onAuthStateChange doesn't fire
+
+    // Only redirect if user WAS logged in and session was invalidated
+    const sessionCheck = setInterval(() => {
+      const key = Object.keys(localStorage).find(
+        (k) => k.startsWith("sb-") && k.endsWith("-auth-token"),
+      );
+      if (!key) return;
+      let token;
+      try {
+        token = JSON.parse(localStorage.getItem(key))?.access_token;
+      } catch {
+        return;
+      }
+      if (!token) return;
+      // Verify token is still valid via direct REST call — bypasses GoTrue lock
+      fetch(`${import.meta.env.VITE_SUPABASE_URL}/auth/v1/user`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+      })
+        .then((r) => {
+          if (r.status === 401 || r.status === 403 || r.status === 404) {
+            Object.keys(localStorage).forEach((k) => {
+              if (k.startsWith("sb-")) localStorage.removeItem(k);
+            });
+            window.location.replace("/");
+          }
+        })
+        .catch(() => {});
+    }, 30000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearInterval(sessionCheck);
+    };
   }, []);
 
   const login = async (email, password) => {
@@ -74,11 +111,11 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const logout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setEffectiveUserId(null);
-    setIsOwner(true);
+  const logout = () => {
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith("sb-")) localStorage.removeItem(key);
+    });
+    window.location.replace("/");
   };
 
   const resetPassword = async (email) => {

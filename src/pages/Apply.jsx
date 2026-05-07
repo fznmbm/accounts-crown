@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
 import { CONFIG } from "../config";
+import { getOwnerUserId } from "../lib/getOwnerUserId";
 
 const uid = () => `${Date.now()}_${Math.random().toString(36).substr(2, 7)}`;
 
@@ -130,7 +131,8 @@ export default function Apply() {
     try {
       const record = {
         id: uid(),
-        target_user_id: CONFIG.ownerUserId,
+        // target_user_id: CONFIG.ownerUserId,
+        target_user_id: await getOwnerUserId(),
         position_type: form.positionType,
         full_name: form.fullName,
         email: form.email,

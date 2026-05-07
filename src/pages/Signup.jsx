@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { CONFIG } from "../config";
 import { Link, useNavigate } from "react-router-dom";
@@ -30,10 +30,34 @@ export default function Signup() {
     setIsMember(!!data);
   };
 
+  // Auto-check when email changes (handles autofill)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (form.email) checkIfMember(form.email);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [form.email]);
+
+  // Detect browser autofill (doesn't trigger onChange)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const emailInput = document.querySelector('input[type="email"]');
+      if (emailInput?.value && emailInput.value !== form.email) {
+        setForm((p) => ({ ...p, email: emailInput.value }));
+      }
+    }, 300);
+    // Stop polling after 3 seconds
+    const timeout = setTimeout(() => clearInterval(interval), 3000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, []);
+
   const submit = async (e) => {
     e.preventDefault();
     setError("");
-    if (!form.companyName.trim())
+    if (!isMember && !form.companyName.trim())
       return setError("Please enter your company name.");
     if (form.password.length < 8)
       return setError("Password must be at least 8 characters.");
@@ -95,6 +119,17 @@ export default function Signup() {
             Create your account
           </h1>
           <form onSubmit={submit} className="space-y-4">
+            <div className="space-y-1">
+              <label className="label">Email</label>
+              <input
+                className="input"
+                type="email"
+                value={form.email}
+                onChange={f("email")}
+                placeholder="you@example.com"
+                required
+              />
+            </div>
             {!isMember && (
               <div className="space-y-1">
                 <label className="label">Company name</label>
@@ -112,18 +147,6 @@ export default function Signup() {
                 the system.
               </div>
             )}
-            <div className="space-y-1">
-              <label className="label">Email</label>
-              <input
-                className="input"
-                type="email"
-                value={form.email}
-                onChange={f("email")}
-                onBlur={(e) => checkIfMember(e.target.value)}
-                placeholder="you@example.com"
-                required
-              />
-            </div>
             <div className="space-y-1">
               <label className="label">Password</label>
               <input

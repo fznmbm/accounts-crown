@@ -137,16 +137,42 @@ export default function Settings() {
   const [membersLoading, setMembersLoading] = useState(true);
 
   useEffect(() => {
-    if (!isOwner) return;
-    supabase
-      .from("workspace_members")
-      .select("*")
-      .eq("owner_user_id", user.id)
-      .then(({ data }) => {
-        setMembers(data || []);
+    if (!isOwner) {
+      setMembersLoading(false);
+      return;
+    }
+    const key = Object.keys(localStorage).find(
+      (k) => k.startsWith("sb-") && k.endsWith("-auth-token"),
+    );
+    const token = key
+      ? (() => {
+          try {
+            return JSON.parse(localStorage.getItem(key))?.access_token;
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+    if (!token) {
+      setMembersLoading(false);
+      return;
+    }
+    fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/workspace_members?owner_user_id=eq.${user.id}&select=*`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+      },
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        setMembers(Array.isArray(data) ? data : []);
         setMembersLoading(false);
-      });
-  }, [isOwner]);
+      })
+      .catch(() => setMembersLoading(false));
+  }, [isOwner, user.id]);
 
   const inviteMember = async () => {
     if (!inviteEmail.trim()) return;
@@ -179,13 +205,37 @@ export default function Settings() {
   };
 
   const removeMember = async (email) => {
-    if (!confirm(`Remove ${email} from your team?`)) return;
-    await supabase
-      .from("workspace_members")
-      .delete()
-      .eq("owner_user_id", user.id)
-      .eq("member_email", email);
-    setMembers((p) => p.filter((m) => m.member_email !== email));
+    if (
+      !confirm(
+        `Remove ${email} from your team? This will also delete their login account.`,
+      )
+    )
+      return;
+    try {
+      // Call Edge Function FIRST — it verifies ownership via DB row, deletes auth user, then deletes DB row
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ memberEmail: email }),
+        },
+      );
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error);
+      // Edge Function handled DB deletion — just update local state
+      setMembers((p) => p.filter((m) => m.member_email !== email));
+      alert(`✓ ${email} removed and login deleted.`);
+    } catch (err) {
+      alert(`Failed: ${err.message}`);
+    }
   };
   const [newTrainingName, setNewTrainingName] = useState("");
   const [newTrainingYears, setNewTrainingYears] = useState(3);

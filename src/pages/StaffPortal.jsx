@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { CONFIG } from "../config";
+import { getOwnerUserId } from "../lib/getOwnerUserId";
 
 const uid = () => `${Date.now()}_${Math.random().toString(36).substr(2, 7)}`;
 
@@ -83,6 +84,7 @@ export default function StaffPortal() {
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [ownerId, setOwnerId] = useState(null);
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [month, setMonth] = useState(currentMonth());
@@ -109,6 +111,11 @@ export default function StaffPortal() {
 
   // Review screen
   const [showReview, setShowReview] = useState(false);
+
+  // ── Fetch owner ID ────────────────────────────────────────────────────────
+  useEffect(() => {
+    getOwnerUserId().then(setOwnerId);
+  }, []);
 
   // ── Load token ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -303,7 +310,8 @@ export default function StaffPortal() {
       const record = {
         id: uid(),
         token_id: tokenData.id,
-        user_id: CONFIG.ownerUserId,
+        //user_id: CONFIG.ownerUserId,
+        user_id: ownerId,
         staff_id: tokenData.staff_id,
         staff_name: tokenData.staff_name,
         month,
