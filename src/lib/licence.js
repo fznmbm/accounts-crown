@@ -1,8 +1,15 @@
-import { supabase } from "./supabase";
+import { createClient } from "@supabase/supabase-js";
+
+// Points to the PLATFORM project (Crown Cars) — not the client's own DB.
+// Licences are managed centrally by the platform owner only.
+const platformClient = createClient(
+  import.meta.env.VITE_PLATFORM_SUPABASE_URL,
+  import.meta.env.VITE_PLATFORM_ANON_KEY,
+);
 
 export async function validateLicence(licenceKey) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await platformClient
       .from("licences")
       .select("*")
       .eq("licence_key", licenceKey)
