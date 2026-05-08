@@ -7,6 +7,14 @@ import DropZone from "../components/DropZone";
 import { parseRemittancePDF } from "../lib/pdfParser";
 import { uid, fmt, fmtD } from "../lib/utils";
 
+// Normalize invoice numbers for matching — strips prefixes/suffixes.
+// "INV-1407", "CC-1407", "2024-1407", "001407" all resolve to 1407.
+// Extracts the last numeric sequence so "INV-2024-1407" → 1407 not 20241407.
+const normalizeInvoiceNum = (n) => {
+  const m = String(n).match(/(\d+)(?:\D*$)/);
+  return m ? parseInt(m[1], 10) : NaN;
+};
+
 export default function Remittances() {
   const { remittances, setRemittances, invoices, setInvoices } = useApp();
   const [parsing, setParsing] = useState(false);
@@ -33,6 +41,17 @@ export default function Remittances() {
 
   const confirmSave = () => {
     if (!preview) return;
+    const duplicate = remittances.find(
+      (r) => r.paymentNumber === preview.paymentNumber,
+    );
+    if (duplicate) {
+      if (
+        !confirm(
+          `Payment #${preview.paymentNumber} has already been imported. Import again?`,
+        )
+      )
+        return;
+    }
     const rem = {
       id: uid(),
       paymentNumber: preview.paymentNumber,
@@ -44,7 +63,9 @@ export default function Remittances() {
     };
     const updatedInvoices = invoices.map((inv) => {
       const match = preview.items.find(
-        (it) => it.invoiceNumber === inv.invoiceNumber,
+        (it) =>
+          normalizeInvoiceNum(it.invoiceNumber) ===
+          normalizeInvoiceNum(inv.invoiceNumber),
       );
       if (!match) return inv;
       return {
@@ -146,7 +167,9 @@ export default function Remittances() {
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {preview.items.map((it, i) => {
                     const inv = invoices.find(
-                      (x) => x.invoiceNumber === it.invoiceNumber,
+                      (x) =>
+                        normalizeInvoiceNum(x.invoiceNumber) ===
+                        normalizeInvoiceNum(it.invoiceNumber),
                     );
                     return (
                       <tr

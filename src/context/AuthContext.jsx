@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { supabase, AUTH_STORAGE_KEY } from "../lib/supabase";
 
 const AuthContext = createContext(null);
 
@@ -58,13 +58,11 @@ export function AuthProvider({ children }) {
 
     // Only redirect if user WAS logged in and session was invalidated
     const sessionCheck = setInterval(() => {
-      const key = Object.keys(localStorage).find(
-        (k) => k.startsWith("sb-") && k.endsWith("-auth-token"),
-      );
-      if (!key) return;
       let token;
       try {
-        token = JSON.parse(localStorage.getItem(key))?.access_token;
+        token = JSON.parse(
+          localStorage.getItem(AUTH_STORAGE_KEY),
+        )?.access_token;
       } catch {
         return;
       }
@@ -78,9 +76,7 @@ export function AuthProvider({ children }) {
       })
         .then((r) => {
           if (r.status === 401 || r.status === 403 || r.status === 404) {
-            Object.keys(localStorage).forEach((k) => {
-              if (k.startsWith("sb-")) localStorage.removeItem(k);
-            });
+            localStorage.removeItem(AUTH_STORAGE_KEY);
             window.location.replace("/");
           }
         })
@@ -112,9 +108,7 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
-    Object.keys(localStorage).forEach((key) => {
-      if (key.startsWith("sb-")) localStorage.removeItem(key);
-    });
+    localStorage.removeItem(AUTH_STORAGE_KEY);
     window.location.replace("/");
   };
 

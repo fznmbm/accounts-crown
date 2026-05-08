@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef } from "react";
-import { supabase } from "../lib/supabase";
+import { supabase, AUTH_STORAGE_KEY } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
 
 export const DEFAULT_SETTINGS = {
@@ -809,12 +809,8 @@ export function AppProvider({ children }) {
 
     // Read token directly from localStorage — bypasses GoTrue lock entirely
     const getToken = () => {
-      const key = Object.keys(localStorage).find(
-        (k) => k.startsWith("sb-") && k.endsWith("-auth-token"),
-      );
-      if (!key) return null;
       try {
-        return JSON.parse(localStorage.getItem(key))?.access_token;
+        return JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY))?.access_token;
       } catch {
         return null;
       }
