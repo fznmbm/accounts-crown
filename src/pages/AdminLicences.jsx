@@ -1,20 +1,6 @@
 import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "../lib/supabase";
 import { fmt, fmtD } from "../lib/utils";
-
-// Uses same Supabase project — needs service role key for admin writes
-// Store this in .env as VITE_SUPABASE_SERVICE_KEY (never share)
-let adminClient = null;
-
-function getAdminClient() {
-  if (!adminClient) {
-    adminClient = createClient(
-      import.meta.env.VITE_SUPABASE_URL,
-      import.meta.env.VITE_SUPABASE_ANON_KEY,
-    );
-  }
-  return adminClient;
-}
 
 const PLANS = ["trial", "starter", "standard", "pro", "owner"];
 const STATUSES = ["active", "suspended", "expired"];
@@ -79,7 +65,7 @@ export default function AdminLicences() {
 
   const loadLicences = async () => {
     setLoading(true);
-    const { data } = await getAdminClient()
+    const { data } = await supabase
       .from("licences")
       .select("*")
       .order("created_at", { ascending: false });
@@ -115,12 +101,9 @@ export default function AdminLicences() {
       created_at: editing?.created_at || Date.now(),
     };
     if (editing) {
-      await getAdminClient()
-        .from("licences")
-        .update(record)
-        .eq("id", editing.id);
+      await supabase.from("licences").update(record).eq("id", editing.id);
     } else {
-      await getAdminClient().from("licences").insert(record);
+      await supabase.from("licences").insert(record);
     }
     await loadLicences();
     setSaving(false);
@@ -130,7 +113,7 @@ export default function AdminLicences() {
   const suspend = async (id) => {
     if (!confirm("Suspend this client? They will immediately lose access."))
       return;
-    await getAdminClient()
+    await supabase
       .from("licences")
       .update({ status: "suspended" })
       .eq("id", id);
@@ -138,16 +121,13 @@ export default function AdminLicences() {
   };
 
   const activate = async (id) => {
-    await getAdminClient()
-      .from("licences")
-      .update({ status: "active" })
-      .eq("id", id);
+    await supabase.from("licences").update({ status: "active" }).eq("id", id);
     await loadLicences();
   };
 
   const del = async (id) => {
     if (!confirm("Delete this licence? This cannot be undone.")) return;
-    await getAdminClient().from("licences").delete().eq("id", id);
+    await supabase.from("licences").delete().eq("id", id);
     await loadLicences();
   };
 

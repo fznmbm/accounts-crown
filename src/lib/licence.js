@@ -1,23 +1,8 @@
-import { createClient } from "@supabase/supabase-js";
-
-// ── This points to YOUR master Supabase project ───────────────
-// Since we're using same project, use same env vars
-// The licences table is public-read so anon key is fine
-let licenceClient = null;
-
-function getLicenceClient() {
-  if (!licenceClient) {
-    licenceClient = createClient(
-      import.meta.env.VITE_SUPABASE_URL,
-      import.meta.env.VITE_SUPABASE_ANON_KEY,
-    );
-  }
-  return licenceClient;
-}
+import { supabase } from "./supabase";
 
 export async function validateLicence(licenceKey) {
   try {
-    const { data, error } = await getLicenceClient()
+    const { data, error } = await supabase
       .from("licences")
       .select("*")
       .eq("licence_key", licenceKey)
