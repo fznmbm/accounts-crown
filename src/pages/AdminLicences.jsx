@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../lib/supabase";
+import { supabase, AUTH_STORAGE_KEY } from "../lib/supabase";
 import { fmt, fmtD } from "../lib/utils";
 
 const PLANS = ["trial", "starter", "standard", "pro", "owner"];
@@ -63,13 +63,26 @@ export default function AdminLicences() {
     }
   };
 
+  const base = import.meta.env.VITE_SUPABASE_URL;
+  const apikey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  const getToken = () => {
+    try {
+      return JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY))?.access_token;
+    } catch {
+      return apikey;
+    }
+  };
+
   const loadLicences = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("licences")
-      .select("*")
-      .order("created_at", { ascending: false });
-    setLicences(data || []);
+    const token = getToken();
+    const res = await fetch(
+      `${base}/rest/v1/licences?select=*&order=created_at.desc`,
+      { headers: { apikey, Authorization: `Bearer ${token}` } },
+    );
+    const data = await res.json();
+    setLicences(Array.isArray(data) ? data : []);
     setLoading(false);
   };
 
@@ -100,10 +113,24 @@ export default function AdminLicences() {
       id: editing?.id || `client-${Date.now()}`,
       created_at: editing?.created_at || Date.now(),
     };
+    const token = getToken();
+    const headers = {
+      apikey,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
     if (editing) {
-      await supabase.from("licences").update(record).eq("id", editing.id);
+      await fetch(`${base}/rest/v1/licences?id=eq.${editing.id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(record),
+      });
     } else {
-      await supabase.from("licences").insert(record);
+      await fetch(`${base}/rest/v1/licences`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(record),
+      });
     }
     await loadLicences();
     setSaving(false);
@@ -113,21 +140,40 @@ export default function AdminLicences() {
   const suspend = async (id) => {
     if (!confirm("Suspend this client? They will immediately lose access."))
       return;
-    await supabase
-      .from("licences")
-      .update({ status: "suspended" })
-      .eq("id", id);
+    const token = getToken();
+    await fetch(`${base}/rest/v1/licences?id=eq.${id}`, {
+      method: "PATCH",
+      headers: {
+        apikey,
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ status: "suspended" }),
+    });
     await loadLicences();
   };
 
   const activate = async (id) => {
-    await supabase.from("licences").update({ status: "active" }).eq("id", id);
+    const token = getToken();
+    await fetch(`${base}/rest/v1/licences?id=eq.${id}`, {
+      method: "PATCH",
+      headers: {
+        apikey,
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ status: "active" }),
+    });
     await loadLicences();
   };
 
   const del = async (id) => {
     if (!confirm("Delete this licence? This cannot be undone.")) return;
-    await supabase.from("licences").delete().eq("id", id);
+    const token = getToken();
+    await fetch(`${base}/rest/v1/licences?id=eq.${id}`, {
+      method: "DELETE",
+      headers: { apikey, Authorization: `Bearer ${token}` },
+    });
     await loadLicences();
   };
 
