@@ -17,6 +17,8 @@ const EMPTY = {
   primaryPAId: "",
   dailyRate: "",
   driverDailyRate: "",
+  paDailyRate: "",
+  paPayRate: "",
   active: true,
   suspended: false,
   notes: "",
@@ -58,6 +60,8 @@ export default function Routes() {
       ...r,
       dailyRate: r.dailyRate || "",
       driverDailyRate: r.driverDailyRate || "",
+      paDailyRate: r.paDailyRate || "",
+      paPayRate: r.paPayRate || "",
       rateBands: r.rateBands || [],
       suspended: r.suspended || false,
       documents: r.documents || [],
@@ -89,6 +93,8 @@ export default function Routes() {
       ...form,
       dailyRate: parseFloat(form.dailyRate) || 0,
       driverDailyRate: parseFloat(form.driverDailyRate) || 0,
+      paDailyRate: parseFloat(form.paDailyRate) || 0,
+      paPayRate: parseFloat(form.paPayRate) || 0,
       suspended: form.suspended === true || form.suspended === "true",
       rateBands: form.rateBands || [],
       documents: form.documents || [],
@@ -255,7 +261,11 @@ export default function Routes() {
                     </td>
                     <td className="td-r font-medium text-green-700 dark:text-green-400">
                       {r.dailyRate && r.driverDailyRate
-                        ? fmt(r.dailyRate - r.driverDailyRate)
+                        ? fmt(
+                            r.dailyRate +
+                              (r.paDailyRate || 0) -
+                              (r.driverDailyRate + (r.paPayRate || 0)),
+                          )
                         : "—"}
                     </td>
                     <td className="td">
@@ -387,7 +397,10 @@ export default function Routes() {
               </FormField>
             </FormGrid>
             <FormGrid cols={2}>
-              <FormField label="WSCC daily rate (£)">
+              <FormField
+                label="WSCC driver rate (£)"
+                hint="What WSCC pays you for the driver"
+              >
                 <input
                   className="input"
                   type="number"
@@ -397,7 +410,10 @@ export default function Routes() {
                   placeholder="116.88"
                 />
               </FormField>
-              <FormField label="Driver daily rate (£)">
+              <FormField
+                label="Driver pay rate (£)"
+                hint="What you pay the driver"
+              >
                 <input
                   className="input"
                   type="number"
@@ -408,6 +424,33 @@ export default function Routes() {
                 />
               </FormField>
             </FormGrid>
+            {form.primaryPAId && (
+              <FormGrid cols={2}>
+                <FormField
+                  label="WSCC PA rate (£)"
+                  hint="What WSCC pays you for the PA"
+                >
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    value={form.paDailyRate}
+                    onChange={f("paDailyRate")}
+                    placeholder="45.00"
+                  />
+                </FormField>
+                <FormField label="PA pay rate (£)" hint="What you pay the PA">
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    value={form.paPayRate}
+                    onChange={f("paPayRate")}
+                    placeholder="35.00"
+                  />
+                </FormField>
+              </FormGrid>
+            )}
             <FormGrid cols={2}>
               <FormField label="Status">
                 <select
