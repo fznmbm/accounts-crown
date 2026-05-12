@@ -226,6 +226,8 @@ export default function Routes() {
                   <th className="th">PA</th>
                   <th className="th-r">WSCC rate</th>
                   <th className="th-r">Driver rate</th>
+                  <th className="th-r">PA WSCC</th>
+                  <th className="th-r">PA pay</th>
                   <th className="th-r">Margin/day</th>
                   <th className="th">Rate bands</th>
                   <th className="th">Status</th>
@@ -258,6 +260,14 @@ export default function Routes() {
                     </td>
                     <td className="td-r text-gray-500 dark:text-gray-400">
                       {r.driverDailyRate ? fmt(r.driverDailyRate) : "—"}
+                    </td>
+                    <td className="td-r text-gray-500 dark:text-gray-400">
+                      {r.primaryPAId && r.paDailyRate
+                        ? fmt(r.paDailyRate)
+                        : "—"}
+                    </td>
+                    <td className="td-r text-gray-500 dark:text-gray-400">
+                      {r.primaryPAId && r.paPayRate ? fmt(r.paPayRate) : "—"}
                     </td>
                     <td className="td-r font-medium text-green-700 dark:text-green-400">
                       {r.dailyRate && r.driverDailyRate

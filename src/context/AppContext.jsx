@@ -661,12 +661,46 @@ const applicationToDb = (a, uid) => ({
 
 // ── sync helper: replace all rows for user in a table ────────────────────────
 async function syncTable(table, data, toDb, userId) {
-  await supabase.from(table).delete().eq("user_id", userId);
+  const base = import.meta.env.VITE_SUPABASE_URL;
+  const apikey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  let token;
+  try {
+    token = JSON.parse(
+      localStorage.getItem(
+        Object.keys(localStorage).find(
+          (k) => k.startsWith("sb-") && k.endsWith("-auth-token"),
+        ) || "",
+      ),
+    )?.access_token;
+  } catch {
+    token = null;
+  }
+  if (!token) {
+    console.error(`syncTable ${table}: no auth token`);
+    return;
+  }
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    apikey,
+    "Content-Type": "application/json",
+    Prefer: "return=minimal",
+  };
+  // Delete all rows for this user
+  await fetch(`${base}/rest/v1/${table}?user_id=eq.${userId}`, {
+    method: "DELETE",
+    headers,
+  });
+  // Insert new rows
   if (data.length > 0) {
-    const { error } = await supabase
-      .from(table)
-      .insert(data.map((r) => toDb(r, userId)));
-    if (error) console.error(`syncTable ${table}:`, error);
+    const res = await fetch(`${base}/rest/v1/${table}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(data.map((r) => toDb(r, userId))),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.error(`syncTable ${table}:`, err);
+    }
   }
 }
 
