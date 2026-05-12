@@ -327,6 +327,7 @@ export default function Staff() {
                   value={form.name}
                   onChange={f("name")}
                   placeholder="John Smith"
+                  autoFocus
                 />
               </FormField>
               <FormField
