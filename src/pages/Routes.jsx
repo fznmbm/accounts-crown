@@ -91,6 +91,7 @@ export default function Routes() {
     const record = {
       id: editing?.id || uid(),
       ...form,
+      number: form.number.replace(/^route\s+/i, "").trim(),
       dailyRate: parseFloat(form.dailyRate) || 0,
       driverDailyRate: parseFloat(form.driverDailyRate) || 0,
       paDailyRate: form.primaryPAId ? parseFloat(form.paDailyRate) || 0 : 0,
@@ -239,7 +240,7 @@ export default function Routes() {
                   <tr key={r.id} className="tr">
                     <td className="td">
                       <p className="font-semibold text-gray-900 dark:text-gray-100">
-                        Route {r.number}
+                        Route {r.number.replace(/^route\s+/i, "")}
                       </p>
                       <p className="muted">{r.name}</p>
                     </td>
@@ -562,7 +563,13 @@ export default function Routes() {
                               ...p,
                               rateBands: p.rateBands.map((b, j) =>
                                 j === i
-                                  ? { ...b, isAdditive: e.target.checked }
+                                  ? {
+                                      ...b,
+                                      isAdditive: e.target.checked,
+                                      effectiveFrom: e.target.checked
+                                        ? null
+                                        : b.effectiveFrom,
+                                    }
                                   : b,
                               ),
                             }))
@@ -578,6 +585,36 @@ export default function Routes() {
                           <span className="chip-green text-xs">+ Add-on</span>
                         )}
                       </label>
+                      {!band.isAdditive && (
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                            Effective from
+                          </span>
+                          <input
+                            className="input text-sm w-40"
+                            type="date"
+                            value={band.effectiveFrom || ""}
+                            onChange={(e) =>
+                              setForm((p) => ({
+                                ...p,
+                                rateBands: p.rateBands.map((b, j) =>
+                                  j === i
+                                    ? {
+                                        ...b,
+                                        effectiveFrom: e.target.value || null,
+                                      }
+                                    : b,
+                                ),
+                              }))
+                            }
+                          />
+                          <span className="text-xs text-gray-400 dark:text-gray-500">
+                            {band.effectiveFrom
+                              ? "Rate applies from this date onwards"
+                              : "Leave blank — rate applies the whole month"}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label className="label mb-1">WSCC rate (£)</label>
