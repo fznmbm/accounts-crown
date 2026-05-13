@@ -426,8 +426,23 @@ export default function Attendance() {
     setShowBulkAssign(true);
   };
 
-  const saveBulkAssign = () => {
-    if (!bulkRoute || !bulkDriverId || bulkDates.length === 0) return;
+  const saveBulkAssign = async () => {
+    if (!bulkRoute || bulkDates.length === 0) return;
+    if (bulkStatus !== "clear" && !bulkDriverId) return;
+
+    // Handle clear
+    if (bulkStatus === "clear") {
+      const toDelete = attendance
+        .filter((a) => bulkDates.includes(a.date) && a.routeId === bulkRoute.id)
+        .map((a) => a.id);
+      const updated = attendance.filter(
+        (a) => !(bulkDates.includes(a.date) && a.routeId === bulkRoute.id),
+      );
+      setAttendance(updated);
+      if (toDelete.length > 0) await deleteAttendanceRecords(toDelete);
+      setShowBulkAssign(false);
+      return;
+    }
     const selectedDriver = staff.find((s) => s.id === bulkDriverId);
     const isPrimary = bulkDriverId === bulkRoute.primaryDriverId;
     const primaryPA = staff.find((s) => s.id === bulkRoute.primaryPAId);
@@ -1922,22 +1937,24 @@ export default function Attendance() {
         >
           <div className="space-y-4">
             {/* Driver + status */}
-            <FormGrid cols={2}>
-              <FormField label="Driver to assign *">
-                <select
-                  className="input"
-                  value={bulkDriverId}
-                  onChange={(e) => setBulkDriverId(e.target.value)}
-                >
-                  <option value="">Select driver…</option>
-                  {drivers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                      {s.id === bulkRoute.primaryDriverId ? " (regular)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
+            <FormGrid cols={bulkStatus === "clear" ? 1 : 2}>
+              {bulkStatus !== "clear" && (
+                <FormField label="Driver to assign *">
+                  <select
+                    className="input"
+                    value={bulkDriverId}
+                    onChange={(e) => setBulkDriverId(e.target.value)}
+                  >
+                    <option value="">Select driver…</option>
+                    {drivers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                        {s.id === bulkRoute.primaryDriverId ? " (regular)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              )}
               <FormField label="Status">
                 <select
                   className="input"
@@ -1947,6 +1964,7 @@ export default function Attendance() {
                   <option value="ran">Ran</option>
                   <option value="no_run">Did not run</option>
                   <option value="half_day">Half day</option>
+                  <option value="clear">⌫ Clear records</option>
                 </select>
               </FormField>
             </FormGrid>

@@ -126,6 +126,9 @@ export default function Settings() {
     staff,
     payments,
     remittances,
+    attendance,
+    allocations,
+    holidays,
   } = useApp();
   const [form, setForm] = useState({ ...DEFAULT_SETTINGS, ...settings });
   const [saved, setSaved] = useState(false);
@@ -779,6 +782,9 @@ export default function Settings() {
                     payments,
                     remittances,
                     settings,
+                    attendance,
+                    allocations,
+                    holidays,
                   };
                   const blob = new Blob([JSON.stringify(data, null, 2)], {
                     type: "application/json",
