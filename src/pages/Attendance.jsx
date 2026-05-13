@@ -835,6 +835,57 @@ export default function Attendance() {
     return totals;
   }, [attendance, month, year]);
 
+  // ── PA totals ─────────────────────────────────────────────────────────────
+  const paTotals = useMemo(() => {
+    const totals = {};
+    const monthAtt = attendance.filter((a) => {
+      if (a.month !== month || a.year !== year) return false;
+      if (a.status === "no_run") return false;
+      const route = activeRoutes.find((r) => r.id === a.routeId);
+      if (route) {
+        const opDays = route.operationalDays || [1, 2, 3, 4, 5];
+        const dow = new Date(a.date).getDay();
+        if (!opDays.includes(dow)) return false;
+      }
+      return true;
+    });
+
+    const addDays = (paId, paName, routeNumber, days) => {
+      if (!paId && !paName) return;
+      const key = paId || paName;
+      if (!totals[key])
+        totals[key] = {
+          name: paName || paId,
+          total: 0,
+          routes: {},
+          isExternal: !paId,
+        };
+      if (!totals[key].routes[routeNumber]) totals[key].routes[routeNumber] = 0;
+      totals[key].routes[routeNumber] += days;
+      totals[key].total += days;
+    };
+
+    monthAtt.forEach((a) => {
+      const daysVal = a.daysValue ?? 1;
+      if (a.isSplitRun) {
+        if (a.amPaId || a.amPaName)
+          addDays(a.amPaId, a.amPaName, a.routeNumber, 0.5);
+        if (
+          (a.pmPaId || a.pmPaName) &&
+          (a.pmPaId !== a.amPaId || a.pmPaName !== a.amPaName)
+        )
+          addDays(a.pmPaId, a.pmPaName, a.routeNumber, 0.5);
+        else if (a.amPaId || a.amPaName)
+          addDays(a.amPaId, a.amPaName, a.routeNumber, 0.5);
+      } else if (a.isExternalPA && a.externalPAName) {
+        addDays("", a.externalPAName, a.routeNumber, daysVal);
+      } else if (a.paId || a.paName) {
+        addDays(a.paId, a.paName, a.routeNumber, daysVal);
+      }
+    });
+    return totals;
+  }, [attendance, month, year, activeRoutes]);
+
   // ── Form helpers ──────────────────────────────────────────────────────────
   const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
@@ -1437,6 +1488,66 @@ export default function Attendance() {
               </div>
             )}
           </div>
+
+          {Object.keys(paTotals).length > 0 && (
+            <div className="p-4 border-b border-gray-100 dark:border-gray-700">
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+                PA days — {MONTHS_SHORT[month]}
+              </p>
+              <div className="space-y-3">
+                {Object.entries(paTotals)
+                  .sort((a, b) => b[1].total - a[1].total)
+                  .map(([key, data]) => {
+                    const s = staff.find((x) => x.id === key);
+                    const name = s?.name || data.name || key;
+                    const routeEntries = Object.entries(data.routes).sort(
+                      (a, b) => b[1] - a[1],
+                    );
+                    return (
+                      <div key={key} className="space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <div
+                              className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${data.isExternal ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" : "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400"}`}
+                            >
+                              {name[0]}
+                            </div>
+                            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">
+                              {name}
+                              {data.isExternal && (
+                                <span className="text-[9px] text-red-400 ml-1">
+                                  ext
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <span className="text-xs font-bold text-gray-900 dark:text-gray-100 flex-shrink-0 ml-1">
+                            {data.total}d
+                          </span>
+                        </div>
+                        {routeEntries.length > 1 && (
+                          <div className="pl-6 space-y-0.5">
+                            {routeEntries.map(([routeNum, days]) => (
+                              <div
+                                key={routeNum}
+                                className="flex items-center justify-between"
+                              >
+                                <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                                  Route {routeNum}
+                                </span>
+                                <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                                  {days}d
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
 
           <div className="p-4">
             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
