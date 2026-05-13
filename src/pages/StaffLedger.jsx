@@ -11,6 +11,7 @@ import {
   MONTHS_SHORT,
   YEARS,
   currentYear,
+  getAllocAmountForStaff,
 } from "../lib/utils";
 
 function BalancePill({ balance }) {
@@ -31,16 +32,10 @@ export default function StaffLedger() {
 
   // ── Per-staff summary ──────────────────────────────────────────────────────
   const summaries = staff.map((s) => {
-    const totalEarned = allocations.reduce((sum, a) => {
-      if (a.regularStaffId === s.id) return sum + (a.regularAmount || 0);
-      if (a.coverEntries?.length > 0) {
-        const entry = a.coverEntries.find((c) => c.staffId === s.id);
-        if (entry) return sum + (Number(entry.amount) || 0);
-      } else if (a.tempStaffId === s.id) {
-        return sum + (a.tempAmount || 0);
-      }
-      return sum;
-    }, 0);
+    const totalEarned = allocations.reduce(
+      (sum, a) => sum + getAllocAmountForStaff(a, s.id),
+      0,
+    );
     const totalPaid = payments
       .filter((p) => p.staffId === s.id)
       .reduce((sum, p) => sum + p.amount, 0);
@@ -102,6 +97,36 @@ export default function StaffLedger() {
           sign: 1,
         });
       }
+      // PA pay
+      if (a.paStaffId === staffId && (a.paAmount || 0) > 0) {
+        earnLines.push({
+          id: a.id + "_pa",
+          type: "earning",
+          date: `${a.year}-${String(a.month + 1).padStart(2, "0")}-01`,
+          month: a.month,
+          year: a.year,
+          label: `Route ${a.routeNumber} — ${a.routeName}`,
+          detail: `${a.paDays} days × ${fmt(a.paRate)} (PA)`,
+          amount: Number(a.paAmount) || 0,
+          sign: 1,
+        });
+      }
+      // Additive band pay
+      (a.additiveEntries || []).forEach((e, i) => {
+        if (e.staffId === staffId && Number(e.amount) > 0) {
+          earnLines.push({
+            id: a.id + "_additive_" + i,
+            type: "earning",
+            date: `${a.year}-${String(a.month + 1).padStart(2, "0")}-01`,
+            month: a.month,
+            year: a.year,
+            label: `Route ${a.routeNumber} — ${a.routeName}`,
+            detail: `${e.days} days × ${fmt(e.rate)} (${e.description})`,
+            amount: Number(e.amount) || 0,
+            sign: 1,
+          });
+        }
+      });
     });
 
     // Payments made

@@ -5,7 +5,7 @@ import PageHeader from "../components/PageHeader";
 import Modal, { FormField, FormGrid, ModalFooter } from "../components/Modal";
 import Badge from "../components/Badge";
 import EmptyState from "../components/EmptyState";
-import { uid, fmt } from "../lib/utils";
+import { uid, fmt, cleanNum } from "../lib/utils";
 import DocumentUploader from "../components/DocumentUploader";
 
 const EMPTY = {
@@ -111,7 +111,7 @@ export default function Routes() {
     const record = {
       id: editing?.id || uid(),
       ...form,
-      number: form.number.replace(/^route\s+/i, "").trim(),
+      number: cleanNum(form.number),
       dailyRate: parseFloat(form.dailyRate) || 0,
       driverDailyRate: parseFloat(form.driverDailyRate) || 0,
       paDailyRate: form.primaryPAId ? parseFloat(form.paDailyRate) || 0 : 0,
@@ -260,7 +260,7 @@ export default function Routes() {
                   <tr key={r.id} className="tr">
                     <td className="td">
                       <p className="font-semibold text-gray-900 dark:text-gray-100">
-                        Route {r.number.replace(/^route\s+/i, "")}
+                        Route {cleanNum(r.number)}
                       </p>
                       <p className="muted">{r.name}</p>
                     </td>

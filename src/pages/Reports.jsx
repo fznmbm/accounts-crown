@@ -2,7 +2,14 @@ import { useState } from "react";
 import { useApp } from "../context/AppContext";
 import PageHeader from "../components/PageHeader";
 import MetricCard from "../components/MetricCard";
-import { fmt, MONTHS_SHORT, YEARS, currentYear } from "../lib/utils";
+import {
+  fmt,
+  MONTHS_SHORT,
+  YEARS,
+  currentYear,
+  cleanNum,
+  getAllocTotalCost,
+} from "../lib/utils";
 
 // ── CSV helpers ──────────────────────────────────────────────────────────────
 function downloadCSV(filename, rows) {
@@ -117,10 +124,10 @@ function exportStaffPayments(payments, staff, year) {
   downloadCSV(`crown-cars-staff-payments-${year}.csv`, [header, ...rows]);
 }
 
-const cleanNum = (n) =>
-  String(n || "")
-    .replace(/^route\s+/i, "")
-    .trim();
+// const cleanNum = (n) =>
+//   String(n || "")
+//     .replace(/^route\s+/i, "")
+//     .trim();
 
 // ── Component ────────────────────────────────────────────────────────────────
 export default function Reports() {
@@ -141,23 +148,7 @@ export default function Reports() {
     const received = inv.reduce((s, x) => s + (x.paidAmount || 0), 0);
     // Use allocations for staff cost — reflects actual cost earned that month
     // not distorted by when payments were physically transferred
-    const staffCost = allocs.reduce((s, a) => {
-      const coverTotal =
-        a.coverEntries?.length > 0
-          ? a.coverEntries.reduce((cs, c) => cs + (Number(c.amount) || 0), 0)
-          : Number(a.tempAmount) || 0;
-      const additiveTot = (a.additiveEntries || []).reduce(
-        (cs, e) => cs + (Number(e.amount) || 0),
-        0,
-      );
-      return (
-        s +
-        (Number(a.regularAmount) || 0) +
-        coverTotal +
-        (Number(a.paAmount) || 0) +
-        additiveTot
-      );
-    }, 0);
+    const staffCost = allocs.reduce((s, a) => s + getAllocTotalCost(a), 0);
     const profit = received / (1 + vatRate / 100) - staffCost;
     const margin = received > 0 ? (profit / received) * 100 : null;
     return {
@@ -212,26 +203,10 @@ export default function Reports() {
       const totalDays = inv.reduce((s, x) => s + (x.daysWorked || 0), 0);
 
       // Staff cost from allocations — uses coverEntries for multiple cover drivers
-      const regularCost = alloc.reduce((s, a) => s + (a.regularAmount || 0), 0);
-      const tempCost = alloc.reduce((s, a) => {
-        if (a.coverEntries?.length > 0)
-          return (
-            s +
-            a.coverEntries.reduce((cs, c) => cs + (Number(c.amount) || 0), 0)
-          );
-        return s + (a.tempAmount || 0);
-      }, 0);
-      const paCost = alloc.reduce((s, a) => s + (Number(a.paAmount) || 0), 0);
-      const additiveCost = alloc.reduce(
-        (s, a) =>
-          s +
-          (a.additiveEntries || []).reduce(
-            (cs, e) => cs + (Number(e.amount) || 0),
-            0,
-          ),
+      const totalStaffCost = alloc.reduce(
+        (s, a) => s + getAllocTotalCost(a),
         0,
       );
-      const totalStaffCost = regularCost + tempCost + paCost + additiveCost;
 
       // True profit = net received (ex-VAT) minus actual staff cost
       const netReceived = received / (1 + vatRate / 100);

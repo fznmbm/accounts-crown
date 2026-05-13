@@ -320,7 +320,7 @@ export default function Attendance() {
           ? form.externalDriverName
           : form.driverName,
       isCoverDriver: form.isSplitRun
-        ? true
+        ? false
         : form.isExternalDriver
           ? true
           : form.isCoverDriver,
@@ -712,6 +712,7 @@ export default function Attendance() {
 
       let regularAmount;
       let rateNote = "";
+      let hasRateSplit = false;
       if (datedBand && regular.driverId) {
         let payTotal = 0;
         let daysBefore = 0;
@@ -739,6 +740,7 @@ export default function Attendance() {
         });
         regularAmount = Math.round(payTotal * 100) / 100;
         if (daysBefore > 0 && daysAfter > 0) {
+          hasRateSplit = true;
           rateNote = `Rate change ${new Date(datedBand.effectiveFrom).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}: ${daysBefore}d × £${regularRate} + ${daysAfter}d × £${newPayRate}`;
         }
       } else {
@@ -765,17 +767,17 @@ export default function Attendance() {
       const firstCover = coverEntries[0];
 
       // Additive band entries — pre-populated as placeholders (days entered manually)
-      const additiveBands = (route.rateBands || []).filter((b) => b.isAdditive);
-      const additiveEntries = additiveBands.map((b) => ({
-        id: uid(),
-        bandId: b.id,
-        description: b.description,
-        staffId: regular.driverId || "",
-        staffName: regular.name || "",
-        days: 0,
-        rate: Number(b.driverRate) || 0,
-        amount: 0,
-      }));
+      // const additiveBands = (route.rateBands || []).filter((b) => b.isAdditive);
+      // const additiveEntries = additiveBands.map((b) => ({
+      //   id: uid(),
+      //   bandId: b.id,
+      //   description: b.description,
+      //   staffId: regular.driverId || "",
+      //   staffName: regular.name || "",
+      //   days: 0,
+      //   rate: Number(b.driverRate) || 0,
+      //   amount: 0,
+      // }));
 
       // PA cost from attendance
       const primaryPAId = route.primaryPAId;
@@ -825,7 +827,8 @@ export default function Attendance() {
         paDays,
         paRate: paPayRate,
         paAmount,
-        additiveEntries,
+        additiveEntries: [],
+        hasRateSplit,
         createdAt: Date.now(),
       });
     }); // ← closes Object.entries(byRoute).forEach

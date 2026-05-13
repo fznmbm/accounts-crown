@@ -14,6 +14,7 @@ import {
   YEARS,
   currentMonth,
   currentYear,
+  cleanNum,
 } from "../lib/utils";
 import { generateInvoicePDF } from "../lib/invoiceGenerator";
 
@@ -664,7 +665,7 @@ export default function Invoices() {
                       </td>
                       <td className="td">
                         <p className="text-sm text-gray-900 dark:text-gray-100">
-                          Route {inv.routeNumber.replace(/^route\s+/i, "")}
+                          Route {cleanNum(inv.routeNumber)}
                         </p>
                         <p className="muted">{inv.routeName}</p>
                         {inv.notes && (
@@ -813,8 +814,7 @@ export default function Invoices() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                              Route {r.number.replace(/^route\s+/i, "")} —{" "}
-                              {r.name}
+                              Route {cleanNum(r.number)} — {r.name}
                             </p>
                             <p className="muted">PO: {r.poNumber || "—"}</p>
                           </div>
@@ -1360,8 +1360,7 @@ export default function Invoices() {
               <div className="flex justify-between">
                 <span className="text-gray-500 dark:text-gray-400">Route</span>
                 <span>
-                  Route {revising.routeNumber.replace(/^route\s+/i, "")} —{" "}
-                  {revising.routeName}
+                  Route {cleanNum(revising.routeNumber)} — {revising.routeName}
                 </span>
               </div>
               <div className="flex justify-between">

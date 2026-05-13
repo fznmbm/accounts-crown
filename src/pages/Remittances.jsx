@@ -183,7 +183,11 @@ export default function Remittances() {
                         <td className="td">
                           {inv ? (
                             <span className="chip-green">
-                              ✓ {inv.routeName || `Route ${inv.routeNumber}`}
+                              ✓{" "}
+                              {inv.routeName ||
+                                `Route ${String(inv.routeNumber || "")
+                                  .replace(/^route\s+/i, "")
+                                  .trim()}`}
                             </span>
                           ) : (
                             <span className="chip-amber">

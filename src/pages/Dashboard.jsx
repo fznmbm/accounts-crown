@@ -12,7 +12,15 @@ import {
   YEARS,
   currentMonth,
   currentYear,
+  cleanNum,
+  getAllocAmountForStaff,
+  getAllocTotalCost,
 } from "../lib/utils";
+
+// const cleanNum = (n) =>
+//   String(n || "")
+//     .replace(/^route\s+/i, "")
+//     .trim();
 
 export default function Dashboard() {
   const {
@@ -53,7 +61,7 @@ export default function Dashboard() {
     (inv) =>
       !allocations.some(
         (a) =>
-          a.routeNumber === inv.routeNumber &&
+          cleanNum(a.routeNumber) === cleanNum(inv.routeNumber) &&
           a.month === month &&
           a.year === year,
       ),
@@ -437,19 +445,10 @@ export default function Dashboard() {
             ) : (
               <div className="divide-y divide-gray-100 dark:divide-gray-700 overflow-y-auto flex-1">
                 {staff.map((s) => {
-                  const earned = allocations.reduce((sum, a) => {
-                    if (a.regularStaffId === s.id)
-                      return sum + (a.regularAmount || 0);
-                    if (a.coverEntries?.length > 0) {
-                      const entry = a.coverEntries.find(
-                        (c) => c.staffId === s.id,
-                      );
-                      if (entry) return sum + (Number(entry.amount) || 0);
-                    } else if (a.tempStaffId === s.id) {
-                      return sum + (a.tempAmount || 0);
-                    }
-                    return sum;
-                  }, 0);
+                  const earned = allocations.reduce(
+                    (sum, a) => sum + getAllocAmountForStaff(a, s.id),
+                    0,
+                  );
                   const paid = payments
                     .filter((p) => p.staffId === s.id)
                     .reduce((sum, p) => sum + p.amount, 0);
@@ -552,7 +551,7 @@ export default function Dashboard() {
                         <div>
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                              Route {r.number}
+                              Route {cleanNum(r.number)}
                             </p>
                             {r.suspended && (
                               <span className="chip-amber text-xs">
@@ -618,7 +617,7 @@ export default function Dashboard() {
                         #{inv.invoiceNumber}
                       </p>
                       <p className="muted">
-                        Route {inv.routeNumber} · {inv.routeName}
+                        Route {cleanNum(inv.routeNumber)} · {inv.routeName}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -671,16 +670,10 @@ export default function Dashboard() {
             const monthAllocs = allocations.filter(
               (a) => a.month === month && a.year === year,
             );
-            const totalOwedStaff = monthAllocs.reduce((s, a) => {
-              const coverTotal =
-                a.coverEntries?.length > 0
-                  ? a.coverEntries.reduce(
-                      (cs, c) => cs + (Number(c.amount) || 0),
-                      0,
-                    )
-                  : Number(a.tempAmount) || 0;
-              return s + (Number(a.regularAmount) || 0) + coverTotal;
-            }, 0);
+            const totalOwedStaff = monthAllocs.reduce(
+              (s, a) => s + getAllocTotalCost(a),
+              0,
+            );
 
             // Staff already paid this month
             const alreadyPaidStaff = payments

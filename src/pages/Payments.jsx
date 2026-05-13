@@ -13,6 +13,9 @@ import {
   YEARS,
   currentMonth,
   currentYear,
+  cleanNum,
+  getAllocAmountForStaff,
+  getAllocDetailForStaff,
 } from "../lib/utils";
 
 const PAY_TYPES = [
@@ -444,7 +447,14 @@ export default function Payments() {
               const staffAllocs = allocations.filter(
                 (a) =>
                   (a.regularStaffId === form.staffId ||
-                    a.tempStaffId === form.staffId) &&
+                    a.tempStaffId === form.staffId ||
+                    (a.coverEntries || []).some(
+                      (c) => c.staffId === form.staffId,
+                    ) ||
+                    a.paStaffId === form.staffId ||
+                    (a.additiveEntries || []).some(
+                      (e) => e.staffId === form.staffId,
+                    )) &&
                   a.month === Number(form.month) &&
                   a.year === Number(form.year),
               );
@@ -452,11 +462,7 @@ export default function Payments() {
               const totalSelected = staffAllocs
                 .filter((a) => (form.allocationIds || []).includes(a.id))
                 .reduce(
-                  (s, a) =>
-                    s +
-                    (a.regularStaffId === form.staffId
-                      ? a.regularAmount || 0
-                      : a.tempAmount || 0),
+                  (s, a) => s + getAllocAmountForStaff(a, form.staffId),
                   0,
                 );
               return (
@@ -466,10 +472,7 @@ export default function Payments() {
                 >
                   <div className="space-y-2 mt-1">
                     {staffAllocs.map((a) => {
-                      const amount =
-                        a.regularStaffId === form.staffId
-                          ? a.regularAmount
-                          : a.tempAmount;
+                      const amount = getAllocAmountForStaff(a, form.staffId);
                       const checked = (form.allocationIds || []).includes(a.id);
                       return (
                         <label
@@ -492,18 +495,10 @@ export default function Payments() {
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                              Route {a.routeNumber} — {a.routeName}
+                              Route {cleanNum(a.routeNumber)} — {a.routeName}
                             </p>
                             <p className="muted">
-                              {a.regularStaffId === form.staffId
-                                ? a.regularDays
-                                : a.tempDays}{" "}
-                              days ×{" "}
-                              {fmt(
-                                a.regularStaffId === form.staffId
-                                  ? a.regularRate
-                                  : a.tempRate,
-                              )}
+                              {getAllocDetailForStaff(a, form.staffId)}
                             </p>
                           </div>
                           <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex-shrink-0">

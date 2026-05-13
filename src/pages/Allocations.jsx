@@ -12,12 +12,14 @@ import {
   YEARS,
   currentMonth,
   currentYear,
+  cleanNum,
+  getAllocTotalCost,
 } from "../lib/utils";
 
-const cleanNum = (n) =>
-  String(n || "")
-    .replace(/^route\s+/i, "")
-    .trim();
+// const cleanNum = (n) =>
+//   String(n || "")
+//     .replace(/^route\s+/i, "")
+//     .trim();
 
 const EMPTY = {
   routeId: "",
@@ -36,6 +38,7 @@ const EMPTY = {
   paRate: "",
   regularAmount: 0,
   additiveEntries: [],
+  hasRateSplit: false,
 };
 
 export default function Allocations() {
@@ -242,6 +245,7 @@ export default function Allocations() {
       paDays: a.paDays || "",
       paRate: a.paRate || "",
       regularAmount: a.regularAmount || 0,
+      hasRateSplit: a.hasRateSplit || false,
       additiveEntries: (() => {
         if (a.additiveEntries?.length > 0) return a.additiveEntries;
         const route = routes.find((r) => r.id === a.routeId);
@@ -275,10 +279,9 @@ export default function Allocations() {
     const regularDays = Number(form.regularDays) || 0;
     const regularRate = Number(form.regularRate) || 0;
     const calculatedAmount = Math.round(regularDays * regularRate * 100) / 100;
-    const hasRateSplit = editing?.notes?.includes("Rate change");
     const regularAmount =
-      hasRateSplit && editing?.regularAmount
-        ? editing.regularAmount
+      form.hasRateSplit && form.regularAmount
+        ? form.regularAmount
         : calculatedAmount;
     const coverEntries = (form.coverEntries || []).map((c) => ({
       ...c,
@@ -296,13 +299,15 @@ export default function Allocations() {
     const paRate = Number(form.paRate) || 0;
     const paAmount = Math.round(paDays * paRate * 100) / 100;
 
-    const additiveEntries = (form.additiveEntries || []).map((e) => ({
-      ...e,
-      days: Number(e.days) || 0,
-      rate: Number(e.rate) || 0,
-      amount:
-        Math.round((Number(e.days) || 0) * (Number(e.rate) || 0) * 100) / 100,
-    }));
+    const additiveEntries = (form.additiveEntries || [])
+      .map((e) => ({
+        ...e,
+        days: Number(e.days) || 0,
+        rate: Number(e.rate) || 0,
+        amount:
+          Math.round((Number(e.days) || 0) * (Number(e.rate) || 0) * 100) / 100,
+      }))
+      .filter((e) => e.days > 0);
 
     const record = {
       id: editing?.id || uid(),
@@ -330,6 +335,7 @@ export default function Allocations() {
       paRate,
       paAmount,
       additiveEntries,
+      hasRateSplit: form.hasRateSplit || false,
       createdAt: editing?.createdAt || Date.now(),
     };
 
@@ -354,23 +360,7 @@ export default function Allocations() {
   // Month totals
   const totalRegular = filtered.reduce((s, a) => s + (a.regularAmount || 0), 0);
   const totalTemp = filtered.reduce((s, a) => s + (a.tempAmount || 0), 0);
-  const totalOwed = filtered.reduce((s, a) => {
-    const coverTotal =
-      a.coverEntries?.length > 0
-        ? a.coverEntries.reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
-        : Number(a.tempAmount) || 0;
-    const additiveTot = (a.additiveEntries || []).reduce(
-      (sum, e) => sum + (Number(e.amount) || 0),
-      0,
-    );
-    return (
-      s +
-      (Number(a.regularAmount) || 0) +
-      coverTotal +
-      (Number(a.paAmount) || 0) +
-      additiveTot
-    );
-  }, 0);
+  const totalOwed = filtered.reduce((s, a) => s + getAllocTotalCost(a), 0);
 
   // Days check — warn if allocation days don't match invoice days
   const getDaysWarning = (a) => {
@@ -610,20 +600,7 @@ export default function Allocations() {
                         )}
                       </td>
                       <td className="td-r font-semibold text-green-700 dark:text-green-400">
-                        {fmt(
-                          (Number(a.regularAmount) || 0) +
-                            (a.coverEntries?.length > 0
-                              ? a.coverEntries.reduce(
-                                  (s, c) => s + (Number(c.amount) || 0),
-                                  0,
-                                )
-                              : Number(a.tempAmount) || 0) +
-                            (Number(a.paAmount) || 0) +
-                            (a.additiveEntries || []).reduce(
-                              (s, e) => s + (Number(e.amount) || 0),
-                              0,
-                            ),
-                        )}
+                        {fmt(getAllocTotalCost(a))}
                       </td>
                       <td className="td">
                         <div className="flex gap-1">
