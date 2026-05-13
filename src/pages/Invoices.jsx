@@ -78,6 +78,64 @@ export default function Invoices() {
       )
       .reduce((s, a) => s + (a.daysValue ?? 1), 0);
 
+  const getAttendanceDaysBefore = (routeId, month, year, cutoffDate) =>
+    attendance
+      .filter(
+        (a) =>
+          a.routeId === routeId &&
+          a.month === month &&
+          a.year === year &&
+          a.date < cutoffDate,
+      )
+      .reduce((s, a) => s + (a.daysValue ?? 1), 0);
+
+  const getAttendanceDaysFrom = (routeId, month, year, cutoffDate) =>
+    attendance
+      .filter(
+        (a) =>
+          a.routeId === routeId &&
+          a.month === month &&
+          a.year === year &&
+          a.date >= cutoffDate,
+      )
+      .reduce((s, a) => s + (a.daysValue ?? 1), 0);
+
+  const buildPreFill = (month, year) => {
+    const days = {};
+    const bandDays = {};
+    routes
+      .filter((r) => r.active && !r.suspended)
+      .forEach((r) => {
+        const datedBand = (r.rateBands || []).find(
+          (b) => !b.isAdditive && b.effectiveFrom,
+        );
+        if (datedBand) {
+          const before = getAttendanceDaysBefore(
+            r.id,
+            month,
+            year,
+            datedBand.effectiveFrom,
+          );
+          const from = getAttendanceDaysFrom(
+            r.id,
+            month,
+            year,
+            datedBand.effectiveFrom,
+          );
+          if (before > 0) days[r.id] = String(before);
+          if (from > 0)
+            bandDays[r.id] = {
+              ...(bandDays[r.id] || {}),
+              [datedBand.id]: String(from),
+            };
+        } else {
+          const total = getAttendanceDays(r.id, month, year);
+          if (total > 0) days[r.id] = String(total);
+        }
+      });
+    return { days, bandDays };
+  };
+
   const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   //const findRoute = (num) => routes.find((r) => r.number === num);
   const findRoute = (num) =>
@@ -326,16 +384,9 @@ export default function Invoices() {
               className="btn-secondary"
               onClick={() => {
                 setGenStartNum(nextInvoiceNum());
-                // Pre-fill days from attendance register
-                const preFilled = {};
-                routes
-                  .filter((r) => r.active && !r.suspended)
-                  .forEach((r) => {
-                    const days = getAttendanceDays(r.id, genMonth, genYear);
-                    if (days > 0) preFilled[r.id] = String(days);
-                  });
-                setGenDays(preFilled);
-                setGenBandDays({});
+                const { days, bandDays } = buildPreFill(genMonth, genYear);
+                setGenDays(days);
+                setGenBandDays(bandDays);
                 setGenNotes({});
                 setShowGen(true);
               }}
@@ -691,14 +742,9 @@ export default function Invoices() {
                   onChange={(e) => {
                     const m = Number(e.target.value);
                     setGenMonth(m);
-                    const preFilled = {};
-                    routes
-                      .filter((r) => r.active && !r.suspended)
-                      .forEach((r) => {
-                        const days = getAttendanceDays(r.id, m, genYear);
-                        if (days > 0) preFilled[r.id] = String(days);
-                      });
-                    setGenDays(preFilled);
+                    const { days, bandDays } = buildPreFill(m, genYear);
+                    setGenDays(days);
+                    setGenBandDays(bandDays);
                   }}
                 >
                   {MONTHS.map((m, i) => (
@@ -715,14 +761,9 @@ export default function Invoices() {
                   onChange={(e) => {
                     const y = Number(e.target.value);
                     setGenYear(y);
-                    const preFilled = {};
-                    routes
-                      .filter((r) => r.active && !r.suspended)
-                      .forEach((r) => {
-                        const days = getAttendanceDays(r.id, genMonth, y);
-                        if (days > 0) preFilled[r.id] = String(days);
-                      });
-                    setGenDays(preFilled);
+                    const { days, bandDays } = buildPreFill(genMonth, y);
+                    setGenDays(days);
+                    setGenBandDays(bandDays);
                   }}
                 >
                   {YEARS.map((y) => (
@@ -838,13 +879,20 @@ export default function Invoices() {
                             const allAdditive =
                               replacementBands.length === 0 &&
                               additiveBands.length > 0;
+                            const hasDatedReplacement = replacementBands.some(
+                              (b) => b.effectiveFrom,
+                            );
+                            const datedBand = replacementBands.find(
+                              (b) => b.effectiveFrom,
+                            );
                             return (
                               <div className="space-y-1.5 pt-1">
-                                {/* If all bands are additive, show standard days field too */}
-                                {allAdditive && (
+                                {(allAdditive || hasDatedReplacement) && (
                                   <div className="flex items-center gap-3">
                                     <span className="text-xs text-gray-600 dark:text-gray-400 flex-1">
-                                      Standard run ({fmt(r.dailyRate)}/day)
+                                      {hasDatedReplacement
+                                        ? `Before ${new Date(datedBand.effectiveFrom).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} (${fmt(r.dailyRate)}/day)`
+                                        : `Standard run (${fmt(r.dailyRate)}/day)`}
                                     </span>
                                     <div className="text-right">
                                       <input
@@ -972,10 +1020,13 @@ export default function Invoices() {
                   let netTotal, daysWorked, unitPrice;
                   if (usesBands) {
                     const allAdditive = r.rateBands.every((b) => b.isAdditive);
-                    // Standard days (only for all-additive band routes)
-                    const stdDays = allAdditive
-                      ? Number(genDays[r.id] || 0)
-                      : 0;
+                    const hasDatedReplacement = r.rateBands.some(
+                      (b) => !b.isAdditive && b.effectiveFrom,
+                    );
+                    const stdDays =
+                      allAdditive || hasDatedReplacement
+                        ? Number(genDays[r.id] || 0)
+                        : 0;
                     const stdAmount = stdDays * Number(r.dailyRate);
                     // Band amounts
                     const bandAmount = r.rateBands
