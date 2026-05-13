@@ -34,6 +34,7 @@ const EMPTY = {
   paStaffName: "",
   paDays: "",
   paRate: "",
+  regularAmount: 0,
 };
 
 export default function Allocations() {
@@ -221,6 +222,7 @@ export default function Allocations() {
       paStaffName: a.paStaffName || "",
       paDays: a.paDays || "",
       paRate: a.paRate || "",
+      regularAmount: a.regularAmount || 0,
     });
     setEditing(a);
     setShowModal(true);
@@ -472,6 +474,13 @@ export default function Allocations() {
                       </td>
                       <td className="td-r text-gray-500 dark:text-gray-400">
                         {fmt(a.regularRate)}
+                        {Math.abs(
+                          a.regularDays * a.regularRate - a.regularAmount,
+                        ) > 0.01 && (
+                          <span className="text-[10px] text-blue-500 dark:text-blue-400 ml-1">
+                            split
+                          </span>
+                        )}
                       </td>
                       <td className="td-r font-medium text-gray-900 dark:text-gray-100">
                         {fmt(a.regularAmount)}
@@ -708,8 +717,25 @@ export default function Allocations() {
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
                   Regular owed:{" "}
                   <span className="font-semibold text-gray-900 dark:text-gray-100">
-                    {fmt(Number(form.regularDays) * Number(form.regularRate))}
+                    {fmt(
+                      form.regularAmount &&
+                        Math.abs(
+                          form.regularAmount -
+                            Number(form.regularDays) * Number(form.regularRate),
+                        ) > 0.01
+                        ? form.regularAmount
+                        : Number(form.regularDays) * Number(form.regularRate),
+                    )}
                   </span>
+                  {form.regularAmount &&
+                    Math.abs(
+                      form.regularAmount -
+                        Number(form.regularDays) * Number(form.regularRate),
+                    ) > 0.01 && (
+                      <span className="text-xs text-blue-500 dark:text-blue-400 ml-2">
+                        † rate split — see notes
+                      </span>
+                    )}
                 </p>
               )}
               {Number(form.regularDays) < Number(form.totalDays) &&
