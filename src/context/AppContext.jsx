@@ -665,13 +665,7 @@ async function syncTable(table, data, toDb, userId) {
   const apikey = import.meta.env.VITE_SUPABASE_ANON_KEY;
   let token;
   try {
-    token = JSON.parse(
-      localStorage.getItem(
-        Object.keys(localStorage).find(
-          (k) => k.startsWith("sb-") && k.endsWith("-auth-token"),
-        ) || "",
-      ),
-    )?.access_token;
+    token = JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY))?.access_token;
   } catch {
     token = null;
   }
@@ -683,14 +677,10 @@ async function syncTable(table, data, toDb, userId) {
     Authorization: `Bearer ${token}`,
     apikey,
     "Content-Type": "application/json",
-    Prefer: "return=minimal",
+    Prefer: "return=minimal,resolution=merge-duplicates",
   };
-  // Delete all rows for this user
-  await fetch(`${base}/rest/v1/${table}?user_id=eq.${userId}`, {
-    method: "DELETE",
-    headers,
-  });
-  // Insert new rows
+
+  // Step 1: Upsert new data FIRST — if this fails, old data stays intact
   if (data.length > 0) {
     const res = await fetch(`${base}/rest/v1/${table}`, {
       method: "POST",
@@ -699,16 +689,54 @@ async function syncTable(table, data, toDb, userId) {
     });
     if (!res.ok) {
       const err = await res.text();
-      console.error(`syncTable ${table}:`, err);
+      console.error(`syncTable ${table} upsert failed — data preserved:`, err);
+      return; // Abort — do NOT delete
     }
+  }
+
+  // Step 2: Delete ONLY rows no longer in dataset (by ID)
+  const currentIds = data.map((r) => r.id);
+  if (currentIds.length > 0) {
+    await fetch(
+      `${base}/rest/v1/${table}?user_id=eq.${userId}&id=not.in.(${currentIds.join(",")})`,
+      { method: "DELETE", headers },
+    );
+  } else {
+    // No data at all — delete everything for this user
+    await fetch(`${base}/rest/v1/${table}?user_id=eq.${userId}`, {
+      method: "DELETE",
+      headers,
+    });
   }
 }
 
+// ── Shared direct fetch helper — bypasses GoTrue lock ──────────────────────
+function getAuthHeaders() {
+  const apikey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const base = import.meta.env.VITE_SUPABASE_URL;
+  let token;
+  try {
+    token = JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY))?.access_token;
+  } catch {
+    token = null;
+  }
+  return { base, apikey, token };
+}
+
 async function syncSettings(data, userId) {
-  const { error } = await supabase
-    .from("settings")
-    .upsert({ id: userId, user_id: userId, data });
-  if (error) console.error("syncSettings error:", error);
+  const { base, apikey, token } = getAuthHeaders();
+  if (!token) return;
+  const res = await fetch(`${base}/rest/v1/settings`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal,resolution=merge-duplicates",
+    },
+    body: JSON.stringify({ id: userId, user_id: userId, data }),
+  });
+  if (!res.ok) console.error("syncSettings error:", await res.text());
 }
 // ── Context ──────────────────────────────────────────────────────────────────
 const AppContext = createContext(null);
@@ -1002,30 +1030,43 @@ export function AppProvider({ children }) {
 
   const setAttendance = async (data) => {
     setRawAttendance(data);
+    const { base, apikey, token } = getAuthHeaders();
+    if (!token) return;
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      apikey,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal,resolution=merge-duplicates",
+    };
     if (data.length === 0) {
-      await supabase.from("attendance").delete().eq("user_id", effectiveUserId);
+      await fetch(`${base}/rest/v1/attendance?user_id=eq.${effectiveUserId}`, {
+        method: "DELETE",
+        headers,
+      });
       return;
     }
     const rows = data.map((a) => attendanceToDb(a, effectiveUserId));
     const chunkSize = 50;
     for (let i = 0; i < rows.length; i += chunkSize) {
       const chunk = rows.slice(i, i + chunkSize);
-      const { error } = await supabase
-        .from("attendance")
-        .upsert(chunk, { onConflict: "id" });
-      if (error) console.error("attendance upsert error:", error);
+      const res = await fetch(`${base}/rest/v1/attendance`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(chunk),
+      });
+      if (!res.ok) console.error("attendance upsert error:", await res.text());
     }
   };
 
   const deleteAttendanceRecords = async (ids) => {
     if (!ids || ids.length === 0) return;
-    for (const id of ids) {
-      await supabase
-        .from("attendance")
-        .delete()
-        .eq("id", id)
-        .eq("user_id", effectiveUserId);
-    }
+    const { base, apikey, token } = getAuthHeaders();
+    if (!token) return;
+    const headers = { Authorization: `Bearer ${token}`, apikey };
+    await fetch(
+      `${base}/rest/v1/attendance?id=in.(${ids.join(",")})&user_id=eq.${effectiveUserId}`,
+      { method: "DELETE", headers },
+    );
   };
 
   const setHolidays = async (data) => {
@@ -1070,17 +1111,31 @@ export function AppProvider({ children }) {
     const deletedIds = applications
       .filter((a) => !currentIds.has(a.id))
       .map((a) => a.id);
-    // Delete removed records by id
+    const { base, apikey, token } = getAuthHeaders();
+    if (!token) return;
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      apikey,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    };
     for (const id of deletedIds) {
-      await supabase.from("staff_applications").delete().eq("id", id);
+      await fetch(`${base}/rest/v1/staff_applications?id=eq.${id}`, {
+        method: "DELETE",
+        headers,
+      });
     }
-    // Upsert remaining
     if (data.length === 0) return;
     const rows = data.map((a) => applicationToDb(a, effectiveUserId));
-    const { error } = await supabase
-      .from("staff_applications")
-      .upsert(rows, { onConflict: "id" });
-    if (error) console.error("applications upsert error:", error);
+    const res = await fetch(`${base}/rest/v1/staff_applications`, {
+      method: "POST",
+      headers: {
+        ...headers,
+        Prefer: "return=minimal,resolution=merge-duplicates",
+      },
+      body: JSON.stringify(rows),
+    });
+    if (!res.ok) console.error("applications upsert error:", await res.text());
   };
 
   const addAuditEntry = async (
@@ -1101,7 +1156,19 @@ export function AppProvider({ children }) {
     };
     const newLog = [entry, ...auditLog];
     setRawAuditLog(newLog);
-    await supabase.from("audit_log").insert(auditToDb(entry, effectiveUserId));
+    const { base, apikey, token } = getAuthHeaders();
+    if (token) {
+      await fetch(`${base}/rest/v1/audit_log`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          apikey,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify(auditToDb(entry, effectiveUserId)),
+      });
+    }
   };
   const setSettings = async (data) => {
     setRawSettings(data);
