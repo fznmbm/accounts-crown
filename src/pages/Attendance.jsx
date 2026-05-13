@@ -1841,6 +1841,11 @@ export default function Attendance() {
                           setForm((p) => ({
                             ...p,
                             isSplitRun: false,
+                            driverId: p.amDriverId || p.driverId,
+                            driverName: p.amDriverName || p.driverName,
+                            isCoverDriver:
+                              (p.amDriverId || p.driverId) !==
+                              (editing?.route?.primaryDriverId || ""),
                             amDriverId: null,
                             amDriverName: null,
                             pmDriverId: null,
