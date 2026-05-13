@@ -35,6 +35,7 @@ const EMPTY = {
   paDays: "",
   paRate: "",
   regularAmount: 0,
+  additiveEntries: [],
 };
 
 export default function Allocations() {
@@ -169,6 +170,23 @@ export default function Allocations() {
       };
     });
     const primaryPA = staff.find((x) => x.id === route?.primaryPAId);
+    const additiveBands = (route?.rateBands || []).filter((b) => b.isAdditive);
+    const primaryDriverId = primaryEntry ? primaryEntry[0] : "";
+    const primaryDriverName = primaryEntry
+      ? staff.find((x) => x.id === primaryEntry[0])?.name ||
+        primaryEntry[1]?.name ||
+        ""
+      : "";
+    const additiveEntries = additiveBands.map((b) => ({
+      id: uid(),
+      bandId: b.id,
+      description: b.description,
+      staffId: primaryDriverId,
+      staffName: primaryDriverName,
+      days: "",
+      rate: b.driverRate ? String(b.driverRate) : "",
+      amount: 0,
+    }));
     setForm((p) => ({
       ...p,
       routeId,
@@ -181,6 +199,7 @@ export default function Allocations() {
       paStaffName: primaryPA?.name || "",
       paRate: route?.paPayRate ? String(route.paPayRate) : "",
       paDays: totalDays ? String(totalDays) : "",
+      additiveEntries,
     }));
   };
 
@@ -223,6 +242,23 @@ export default function Allocations() {
       paDays: a.paDays || "",
       paRate: a.paRate || "",
       regularAmount: a.regularAmount || 0,
+      additiveEntries: (() => {
+        if (a.additiveEntries?.length > 0) return a.additiveEntries;
+        const route = routes.find((r) => r.id === a.routeId);
+        const additiveBands = (route?.rateBands || []).filter(
+          (b) => b.isAdditive,
+        );
+        return additiveBands.map((b) => ({
+          id: uid(),
+          bandId: b.id,
+          description: b.description,
+          staffId: a.regularStaffId || "",
+          staffName: staff.find((s) => s.id === a.regularStaffId)?.name || "",
+          days: "",
+          rate: b.driverRate ? String(b.driverRate) : "",
+          amount: 0,
+        }));
+      })(),
     });
     setEditing(a);
     setShowModal(true);
@@ -260,6 +296,14 @@ export default function Allocations() {
     const paRate = Number(form.paRate) || 0;
     const paAmount = Math.round(paDays * paRate * 100) / 100;
 
+    const additiveEntries = (form.additiveEntries || []).map((e) => ({
+      ...e,
+      days: Number(e.days) || 0,
+      rate: Number(e.rate) || 0,
+      amount:
+        Math.round((Number(e.days) || 0) * (Number(e.rate) || 0) * 100) / 100,
+    }));
+
     const record = {
       id: editing?.id || uid(),
       routeId: form.routeId,
@@ -285,6 +329,7 @@ export default function Allocations() {
       paDays,
       paRate,
       paAmount,
+      additiveEntries,
       createdAt: editing?.createdAt || Date.now(),
     };
 
@@ -314,11 +359,16 @@ export default function Allocations() {
       a.coverEntries?.length > 0
         ? a.coverEntries.reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
         : Number(a.tempAmount) || 0;
+    const additiveTot = (a.additiveEntries || []).reduce(
+      (sum, e) => sum + (Number(e.amount) || 0),
+      0,
+    );
     return (
       s +
       (Number(a.regularAmount) || 0) +
       coverTotal +
-      (Number(a.paAmount) || 0)
+      (Number(a.paAmount) || 0) +
+      additiveTot
     );
   }, 0);
 
@@ -437,6 +487,7 @@ export default function Allocations() {
                   <th className="th" colSpan={3}>
                     Cover drivers
                   </th>
+                  <th className="th-r">Extras</th>
                   <th className="th-r">PA owed</th>
                   <th className="th-r">Total owed</th>
                   <th className="th"></th>
@@ -526,6 +577,32 @@ export default function Allocations() {
                         })()}
                       </td>
                       <td className="td-r text-gray-700 dark:text-gray-300">
+                        {(() => {
+                          const entries = (a.additiveEntries || []).filter(
+                            (e) => Number(e.amount) > 0,
+                          );
+                          const total = entries.reduce(
+                            (s, e) => s + (Number(e.amount) || 0),
+                            0,
+                          );
+                          return total > 0 ? (
+                            <div>
+                              <div className="font-medium">{fmt(total)}</div>
+                              {entries.map((e, i) => (
+                                <div
+                                  key={i}
+                                  className="text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[80px]"
+                                >
+                                  {e.description}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="muted">—</span>
+                          );
+                        })()}
+                      </td>
+                      <td className="td-r text-gray-700 dark:text-gray-300">
                         {a.paAmount > 0 ? (
                           fmt(a.paAmount)
                         ) : (
@@ -541,7 +618,11 @@ export default function Allocations() {
                                   0,
                                 )
                               : Number(a.tempAmount) || 0) +
-                            (Number(a.paAmount) || 0),
+                            (Number(a.paAmount) || 0) +
+                            (a.additiveEntries || []).reduce(
+                              (s, e) => s + (Number(e.amount) || 0),
+                              0,
+                            ),
                         )}
                       </td>
                       <td className="td">
@@ -574,6 +655,8 @@ export default function Allocations() {
                   </td>
                   <td className="td-r font-semibold">{fmt(totalRegular)}</td>
                   <td colSpan={3} />
+                  <td />
+                  <td />
                   <td className="td-r font-bold text-green-700 dark:text-green-400">
                     {fmt(totalOwed)}
                   </td>
@@ -973,6 +1056,136 @@ export default function Allocations() {
                 </p>
               )}
             </div>
+
+            {/* Additive band pay */}
+            {(form.additiveEntries || []).length > 0 && (
+              <div className="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-3">
+                <div>
+                  <p className="label">Additive band pay</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                    Extra pay for additional service runs — enter days manually
+                  </p>
+                </div>
+                {(form.additiveEntries || []).map((e, i) => (
+                  <div
+                    key={e.id || i}
+                    className="p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-800 space-y-2"
+                  >
+                    <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">
+                      + {e.description}
+                    </p>
+                    <FormGrid cols={3}>
+                      <FormField label="Driver">
+                        <select
+                          className="input text-sm"
+                          value={e.staffId}
+                          onChange={(ev) => {
+                            const s = staff.find(
+                              (x) => x.id === ev.target.value,
+                            );
+                            setForm((p) => ({
+                              ...p,
+                              additiveEntries: p.additiveEntries.map((x, j) =>
+                                j === i
+                                  ? {
+                                      ...x,
+                                      staffId: ev.target.value,
+                                      staffName: s?.name || "",
+                                    }
+                                  : x,
+                              ),
+                            }));
+                          }}
+                        >
+                          <option value="">Select driver…</option>
+                          {drivers.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </FormField>
+                      <FormField label="Days">
+                        <input
+                          className="input text-sm"
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={e.days}
+                          onChange={(ev) => {
+                            const days = ev.target.value;
+                            const amount =
+                              Math.round(
+                                (Number(days) || 0) *
+                                  (Number(e.rate) || 0) *
+                                  100,
+                              ) / 100;
+                            setForm((p) => ({
+                              ...p,
+                              additiveEntries: p.additiveEntries.map((x, j) =>
+                                j === i ? { ...x, days, amount } : x,
+                              ),
+                            }));
+                          }}
+                          placeholder="0"
+                        />
+                      </FormField>
+                      <FormField
+                        label="Rate (£/day)"
+                        hint="What you pay the driver"
+                      >
+                        <input
+                          className="input text-sm"
+                          type="number"
+                          step="0.01"
+                          value={e.rate}
+                          onChange={(ev) => {
+                            const rate = ev.target.value;
+                            const amount =
+                              Math.round(
+                                (Number(e.days) || 0) *
+                                  (Number(rate) || 0) *
+                                  100,
+                              ) / 100;
+                            setForm((p) => ({
+                              ...p,
+                              additiveEntries: p.additiveEntries.map((x, j) =>
+                                j === i ? { ...x, rate, amount } : x,
+                              ),
+                            }));
+                          }}
+                          placeholder="0.00"
+                        />
+                      </FormField>
+                    </FormGrid>
+                    {e.days && e.rate && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Extra pay:{" "}
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">
+                          {fmt(Number(e.days) * Number(e.rate))}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                ))}
+                {(form.additiveEntries || []).some(
+                  (e) => Number(e.days) > 0,
+                ) && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Total additive pay:{" "}
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">
+                      {fmt(
+                        (form.additiveEntries || []).reduce(
+                          (s, e) =>
+                            s + (Number(e.days) || 0) * (Number(e.rate) || 0),
+                          0,
+                        ),
+                      )}
+                    </span>
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* PA section */}
             {(() => {

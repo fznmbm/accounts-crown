@@ -146,11 +146,16 @@ export default function Reports() {
         a.coverEntries?.length > 0
           ? a.coverEntries.reduce((cs, c) => cs + (Number(c.amount) || 0), 0)
           : Number(a.tempAmount) || 0;
+      const additiveTot = (a.additiveEntries || []).reduce(
+        (cs, e) => cs + (Number(e.amount) || 0),
+        0,
+      );
       return (
         s +
         (Number(a.regularAmount) || 0) +
         coverTotal +
-        (Number(a.paAmount) || 0)
+        (Number(a.paAmount) || 0) +
+        additiveTot
       );
     }, 0);
     const profit = received / (1 + vatRate / 100) - staffCost;
@@ -217,7 +222,16 @@ export default function Reports() {
         return s + (a.tempAmount || 0);
       }, 0);
       const paCost = alloc.reduce((s, a) => s + (Number(a.paAmount) || 0), 0);
-      const totalStaffCost = regularCost + tempCost + paCost;
+      const additiveCost = alloc.reduce(
+        (s, a) =>
+          s +
+          (a.additiveEntries || []).reduce(
+            (cs, e) => cs + (Number(e.amount) || 0),
+            0,
+          ),
+        0,
+      );
+      const totalStaffCost = regularCost + tempCost + paCost + additiveCost;
 
       // True profit = net received (ex-VAT) minus actual staff cost
       const netReceived = received / (1 + vatRate / 100);

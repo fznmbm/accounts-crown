@@ -254,6 +254,7 @@ const allocationFromDb = (a) => ({
   paDays: a.pa_days || 0,
   paRate: a.pa_rate || 0,
   paAmount: a.pa_amount || 0,
+  additiveEntries: a.additive_entries || [],
   createdAt: a.created_at,
 });
 const allocationToDb = (a, uid) => ({
@@ -282,6 +283,7 @@ const allocationToDb = (a, uid) => ({
   pa_days: a.paDays || 0,
   pa_rate: a.paRate || 0,
   pa_amount: a.paAmount || 0,
+  additive_entries: a.additiveEntries || [],
   created_at: a.createdAt,
 });
 

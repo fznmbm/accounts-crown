@@ -764,6 +764,19 @@ export default function Attendance() {
       // Legacy single temp fields — populate from first cover entry for backwards compat
       const firstCover = coverEntries[0];
 
+      // Additive band entries — pre-populated as placeholders (days entered manually)
+      const additiveBands = (route.rateBands || []).filter((b) => b.isAdditive);
+      const additiveEntries = additiveBands.map((b) => ({
+        id: uid(),
+        bandId: b.id,
+        description: b.description,
+        staffId: regular.driverId || "",
+        staffName: regular.name || "",
+        days: 0,
+        rate: Number(b.driverRate) || 0,
+        amount: 0,
+      }));
+
       // PA cost from attendance
       const primaryPAId = route.primaryPAId;
       const primaryPA = primaryPAId
@@ -812,6 +825,7 @@ export default function Attendance() {
         paDays,
         paRate: paPayRate,
         paAmount,
+        additiveEntries,
         createdAt: Date.now(),
       });
     }); // ← closes Object.entries(byRoute).forEach
