@@ -14,6 +14,11 @@ import {
   currentYear,
 } from "../lib/utils";
 
+const cleanNum = (n) =>
+  String(n || "")
+    .replace(/^route\s+/i, "")
+    .trim();
+
 const EMPTY = {
   routeId: "",
   month: currentMonth(),
@@ -25,6 +30,10 @@ const EMPTY = {
   coverEntries: [],
   absenceReason: "",
   notes: "",
+  paStaffId: "",
+  paStaffName: "",
+  paDays: "",
+  paRate: "",
 };
 
 export default function Allocations() {
@@ -118,7 +127,7 @@ export default function Allocations() {
     const route = routes.find((r) => r.id === routeId);
     const inv = invoices.find(
       (x) =>
-        x.routeNumber === route?.number &&
+        cleanNum(x.routeNumber) === cleanNum(route?.number) &&
         x.month === Number(form.month) &&
         x.year === Number(form.year),
     );
@@ -158,6 +167,7 @@ export default function Allocations() {
         isExternal: false,
       };
     });
+    const primaryPA = staff.find((x) => x.id === route?.primaryPAId);
     setForm((p) => ({
       ...p,
       routeId,
@@ -166,6 +176,10 @@ export default function Allocations() {
       regularStaffId: primaryEntry ? primaryEntry[0] : p.regularStaffId,
       regularDays: primaryEntry ? primaryEntry[1].days : "",
       coverEntries,
+      paStaffId: route?.primaryPAId || "",
+      paStaffName: primaryPA?.name || "",
+      paRate: route?.paPayRate ? String(route.paPayRate) : "",
+      paDays: totalDays ? String(totalDays) : "",
     }));
   };
 
@@ -203,6 +217,10 @@ export default function Allocations() {
       coverEntries,
       absenceReason: a.absenceReason || "",
       notes: a.notes || "",
+      paStaffId: a.paStaffId || "",
+      paStaffName: a.paStaffName || "",
+      paDays: a.paDays || "",
+      paRate: a.paRate || "",
     });
     setEditing(a);
     setShowModal(true);
@@ -218,7 +236,12 @@ export default function Allocations() {
     const route = getRoute(form.routeId);
     const regularDays = Number(form.regularDays) || 0;
     const regularRate = Number(form.regularRate) || 0;
-    const regularAmount = Math.round(regularDays * regularRate * 100) / 100;
+    const calculatedAmount = Math.round(regularDays * regularRate * 100) / 100;
+    const hasRateSplit = editing?.notes?.includes("Rate change");
+    const regularAmount =
+      hasRateSplit && editing?.regularAmount
+        ? editing.regularAmount
+        : calculatedAmount;
     const coverEntries = (form.coverEntries || []).map((c) => ({
       ...c,
       days: Number(c.days) || 0,
@@ -230,6 +253,10 @@ export default function Allocations() {
     const tempDays = first ? Number(first.days) || 0 : 0;
     const tempRate = first ? Number(first.rate) || 0 : 0;
     const tempAmount = first ? Number(first.amount) || 0 : 0;
+
+    const paDays = Number(form.paDays) || 0;
+    const paRate = Number(form.paRate) || 0;
+    const paAmount = Math.round(paDays * paRate * 100) / 100;
 
     const record = {
       id: editing?.id || uid(),
@@ -251,6 +278,11 @@ export default function Allocations() {
       coverEntries,
       absenceReason: form.absenceReason || "",
       notes: form.notes || "",
+      paStaffId: form.paStaffId || null,
+      paStaffName: form.paStaffName || "",
+      paDays,
+      paRate,
+      paAmount,
       createdAt: editing?.createdAt || Date.now(),
     };
 
@@ -280,14 +312,19 @@ export default function Allocations() {
       a.coverEntries?.length > 0
         ? a.coverEntries.reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
         : Number(a.tempAmount) || 0;
-    return s + (Number(a.regularAmount) || 0) + coverTotal;
+    return (
+      s +
+      (Number(a.regularAmount) || 0) +
+      coverTotal +
+      (Number(a.paAmount) || 0)
+    );
   }, 0);
 
   // Days check — warn if allocation days don't match invoice days
   const getDaysWarning = (a) => {
     const inv = invoices.find(
       (x) =>
-        x.routeNumber === a.routeNumber &&
+        cleanNum(x.routeNumber) === cleanNum(a.routeNumber) &&
         x.month === a.month &&
         x.year === a.year,
     );
@@ -398,6 +435,7 @@ export default function Allocations() {
                   <th className="th" colSpan={3}>
                     Cover drivers
                   </th>
+                  <th className="th-r">PA owed</th>
                   <th className="th-r">Total owed</th>
                   <th className="th"></th>
                 </tr>
@@ -409,7 +447,7 @@ export default function Allocations() {
                     <tr key={a.id} className="tr">
                       <td className="td">
                         <p className="font-semibold text-gray-900 dark:text-gray-100">
-                          Route {a.routeNumber}
+                          Route {a.routeNumber.replace(/^route\s+/i, "")}
                         </p>
                         <p className="muted">{a.routeName}</p>
                         {warning && (
@@ -478,6 +516,13 @@ export default function Allocations() {
                           );
                         })()}
                       </td>
+                      <td className="td-r text-gray-700 dark:text-gray-300">
+                        {a.paAmount > 0 ? (
+                          fmt(a.paAmount)
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
                       <td className="td-r font-semibold text-green-700 dark:text-green-400">
                         {fmt(
                           (Number(a.regularAmount) || 0) +
@@ -486,7 +531,8 @@ export default function Allocations() {
                                   (s, c) => s + (Number(c.amount) || 0),
                                   0,
                                 )
-                              : Number(a.tempAmount) || 0),
+                              : Number(a.tempAmount) || 0) +
+                            (Number(a.paAmount) || 0),
                         )}
                       </td>
                       <td className="td">
@@ -549,7 +595,7 @@ export default function Allocations() {
                     .filter((r) => r.active)
                     .map((r) => (
                       <option key={r.id} value={r.id}>
-                        Route {r.number} — {r.name}
+                        Route {r.number.replace(/^route\s+/i, "")} — {r.name}
                       </option>
                     ))}
                 </select>
@@ -725,6 +771,16 @@ export default function Allocations() {
                   No cover drivers — click "+ Add cover driver" to add one.
                 </p>
               )}
+              {(form.coverEntries || []).some(
+                (c) =>
+                  Number(c.rate) > 0 &&
+                  Number(c.rate) === Number(form.regularRate),
+              ) && (
+                <div className="alert-warn text-xs text-amber-700 dark:text-amber-400">
+                  ⚠ Cover rate matches regular rate — adjust if this driver is
+                  paid differently.
+                </div>
+              )}
               {(form.coverEntries || []).map((c, i) => (
                 <div
                   key={c.id}
@@ -840,7 +896,10 @@ export default function Allocations() {
                         placeholder="0"
                       />
                     </FormField>
-                    <FormField label="Rate (£/day)">
+                    <FormField
+                      label="Rate (£/day)"
+                      hint="Adjust if different from regular"
+                    >
                       <input
                         className="input text-sm"
                         type="number"
@@ -888,6 +947,76 @@ export default function Allocations() {
                 </p>
               )}
             </div>
+
+            {/* PA section */}
+            {(() => {
+              const route = getRoute(form.routeId);
+              if (!route?.primaryPAId && !form.paStaffId) return null;
+              const pas = staff.filter(
+                (s) => s.type === "pa" || s.type === "driver_pa",
+              );
+              return (
+                <div className="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-3">
+                  <p className="label">PA (Personal Assistant)</p>
+                  <FormGrid cols={3}>
+                    <FormField label="PA staff member">
+                      <select
+                        className="input"
+                        value={form.paStaffId}
+                        onChange={(e) => {
+                          const s = staff.find((x) => x.id === e.target.value);
+                          setForm((p) => ({
+                            ...p,
+                            paStaffId: e.target.value,
+                            paStaffName: s?.name || "",
+                          }));
+                        }}
+                      >
+                        <option value="">No PA</option>
+                        {pas.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </FormField>
+                    <FormField label="Days worked">
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={form.paDays}
+                        onChange={(e) =>
+                          setForm((p) => ({ ...p, paDays: e.target.value }))
+                        }
+                        placeholder="0"
+                      />
+                    </FormField>
+                    <FormField label="Rate (£/day)" hint="What you pay the PA">
+                      <input
+                        className="input"
+                        type="number"
+                        step="0.01"
+                        value={form.paRate}
+                        onChange={(e) =>
+                          setForm((p) => ({ ...p, paRate: e.target.value }))
+                        }
+                        placeholder="0.00"
+                      />
+                    </FormField>
+                  </FormGrid>
+                  {form.paDays && form.paRate && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      PA owed:{" "}
+                      <span className="font-semibold text-gray-900 dark:text-gray-100">
+                        {fmt(Number(form.paDays) * Number(form.paRate))}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Days validation */}
             {form.totalDays &&

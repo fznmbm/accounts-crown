@@ -88,6 +88,26 @@ export default function Routes() {
       );
       return;
     }
+    if (!form.primaryDriverId) {
+      if (
+        !confirm(
+          "No primary driver assigned. Fill month and auto-generate allocations won't work correctly for this route. Save anyway?",
+        )
+      )
+        return;
+    }
+    if (
+      form.active &&
+      !form.suspended &&
+      (!form.dailyRate || parseFloat(form.dailyRate) === 0)
+    ) {
+      if (
+        !confirm(
+          "WSCC daily rate is £0 on an active route. Invoices will generate as £0. Save anyway?",
+        )
+      )
+        return;
+    }
     const record = {
       id: editing?.id || uid(),
       ...form,

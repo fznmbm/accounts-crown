@@ -117,6 +117,11 @@ function exportStaffPayments(payments, staff, year) {
   downloadCSV(`crown-cars-staff-payments-${year}.csv`, [header, ...rows]);
 }
 
+const cleanNum = (n) =>
+  String(n || "")
+    .replace(/^route\s+/i, "")
+    .trim();
+
 // ── Component ────────────────────────────────────────────────────────────────
 export default function Reports() {
   const { invoices, payments, staff, routes, allocations, settings } = useApp();
@@ -141,7 +146,12 @@ export default function Reports() {
         a.coverEntries?.length > 0
           ? a.coverEntries.reduce((cs, c) => cs + (Number(c.amount) || 0), 0)
           : Number(a.tempAmount) || 0;
-      return s + (Number(a.regularAmount) || 0) + coverTotal;
+      return (
+        s +
+        (Number(a.regularAmount) || 0) +
+        coverTotal +
+        (Number(a.paAmount) || 0)
+      );
     }, 0);
     const profit = received / (1 + vatRate / 100) - staffCost;
     const margin = received > 0 ? (profit / received) * 100 : null;
@@ -183,10 +193,12 @@ export default function Reports() {
   const routeReport = routes
     .map((r) => {
       const inv = invoices.filter(
-        (x) => x.routeNumber === r.number && x.year === year,
+        (x) =>
+          cleanNum(x.routeNumber) === cleanNum(r.number) && x.year === year,
       );
       const alloc = allocations.filter(
-        (a) => a.routeNumber === r.number && a.year === year,
+        (a) =>
+          cleanNum(a.routeNumber) === cleanNum(r.number) && a.year === year,
       );
 
       const invoiced = inv.reduce((s, x) => s + (x.total || 0), 0);
@@ -204,7 +216,8 @@ export default function Reports() {
           );
         return s + (a.tempAmount || 0);
       }, 0);
-      const totalStaffCost = regularCost + tempCost;
+      const paCost = alloc.reduce((s, a) => s + (Number(a.paAmount) || 0), 0);
+      const totalStaffCost = regularCost + tempCost + paCost;
 
       // True profit = net received (ex-VAT) minus actual staff cost
       const netReceived = received / (1 + vatRate / 100);
@@ -485,7 +498,7 @@ export default function Reports() {
                   <tr key={r.id} className="tr">
                     <td className="td">
                       <p className="font-semibold text-gray-900 dark:text-gray-100">
-                        Route {r.number}
+                        Route {cleanNum(r.number)}
                       </p>
                       <p className="muted">{r.name}</p>
                     </td>
@@ -519,6 +532,155 @@ export default function Reports() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Monthly reconciliation matrix */}
+        {routeReport.length > 0 && (
+          <div className="card overflow-hidden">
+            <div className="card-section">
+              <h3 className="section-title">Monthly reconciliation — {year}</h3>
+              <p className="muted mt-0.5">
+                Net profit per route per month — ex-VAT received minus all staff
+                and PA costs
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className={theadBg}>
+                    <th className="th">Route</th>
+                    {MONTHS_SHORT.map((m) => (
+                      <th key={m} className="th-r">
+                        {m}
+                      </th>
+                    ))}
+                    <th className="th-r">Total</th>
+                  </tr>
+                </thead>
+                <tbody className={divRow}>
+                  {routeReport.map((r) => {
+                    const monthlyData = Array.from({ length: 12 }, (_, i) => {
+                      const inv = invoices.filter(
+                        (x) =>
+                          cleanNum(x.routeNumber) === cleanNum(r.number) &&
+                          x.month === i &&
+                          x.year === year,
+                      );
+                      const alloc = allocations.filter(
+                        (a) =>
+                          cleanNum(a.routeNumber) === cleanNum(r.number) &&
+                          a.month === i &&
+                          a.year === year,
+                      );
+                      const invoiced = inv.reduce(
+                        (s, x) => s + (x.total || 0),
+                        0,
+                      );
+                      const received = inv.reduce(
+                        (s, x) => s + (x.paidAmount || 0),
+                        0,
+                      );
+                      const netReceived = received / (1 + vatRate / 100);
+                      const cost = alloc.reduce((s, a) => {
+                        const cover =
+                          a.coverEntries?.length > 0
+                            ? a.coverEntries.reduce(
+                                (cs, c) => cs + (Number(c.amount) || 0),
+                                0,
+                              )
+                            : Number(a.tempAmount) || 0;
+                        return (
+                          s +
+                          (Number(a.regularAmount) || 0) +
+                          cover +
+                          (Number(a.paAmount) || 0)
+                        );
+                      }, 0);
+                      return {
+                        profit: invoiced > 0 ? netReceived - cost : null,
+                        hasAlloc: alloc.length > 0,
+                        invoiced,
+                      };
+                    });
+                    const annualProfit = monthlyData
+                      .filter((d) => d.profit !== null)
+                      .reduce((s, d) => s + d.profit, 0);
+                    return (
+                      <tr key={r.id} className="tr">
+                        <td className="td">
+                          <p className="font-semibold text-gray-900 dark:text-gray-100">
+                            Route {cleanNum(r.number)}
+                          </p>
+                          <p className="muted">{r.name}</p>
+                        </td>
+                        {monthlyData.map((d, i) => (
+                          <td key={i} className="td-r">
+                            {d.profit === null ? (
+                              <span className="text-gray-200 dark:text-gray-700">
+                                —
+                              </span>
+                            ) : !d.hasAlloc ? (
+                              <span
+                                className="text-amber-500 dark:text-amber-400"
+                                title="No allocation — cost unknown"
+                              >
+                                {`£${Math.round(d.profit).toLocaleString("en-GB")}`}
+                              </span>
+                            ) : (
+                              <span
+                                className={`font-medium ${
+                                  d.profit > 0
+                                    ? "text-green-700 dark:text-green-400"
+                                    : d.profit < 0
+                                      ? "text-red-600 dark:text-red-400"
+                                      : "text-gray-400 dark:text-gray-500"
+                                }`}
+                              >
+                                {`£${Math.round(d.profit).toLocaleString("en-GB")}`}
+                              </span>
+                            )}
+                          </td>
+                        ))}
+                        <td className="td-r">
+                          <span
+                            className={`font-bold ${
+                              annualProfit > 0
+                                ? "text-green-700 dark:text-green-400"
+                                : annualProfit < 0
+                                  ? "text-red-600 dark:text-red-400"
+                                  : "text-gray-400 dark:text-gray-500"
+                            }`}
+                          >
+                            {`£${Math.round(annualProfit).toLocaleString("en-GB")}`}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-5 py-2 border-t border-gray-100 dark:border-gray-700 flex gap-4 text-xs text-gray-400 dark:text-gray-500">
+              <span>
+                <span className="text-green-600 dark:text-green-400 font-semibold">
+                  Green
+                </span>{" "}
+                = profitable
+              </span>
+              <span>
+                <span className="text-red-500 dark:text-red-400 font-semibold">
+                  Red
+                </span>{" "}
+                = loss
+              </span>
+              <span>
+                <span className="text-amber-500 dark:text-amber-400 font-semibold">
+                  Amber
+                </span>{" "}
+                = invoice exists but no allocation recorded
+              </span>
+            </div>
           </div>
         )}
 

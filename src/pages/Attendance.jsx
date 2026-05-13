@@ -701,7 +701,49 @@ export default function Attendance() {
       if (!regular) return;
 
       const regularRate = route.driverDailyRate || 0;
-      const regularAmount = Math.round(regular.days * regularRate * 100) / 100;
+
+      // Check for mid-month rate change (replacement band with effectiveFrom date)
+      const datedBand = (route.rateBands || []).find(
+        (b) => !b.isAdditive && b.effectiveFrom,
+      );
+      const newPayRate = datedBand
+        ? parseFloat(datedBand.driverRate) || regularRate
+        : regularRate;
+
+      let regularAmount;
+      let rateNote = "";
+      if (datedBand && regular.driverId) {
+        let payTotal = 0;
+        let daysBefore = 0;
+        let daysAfter = 0;
+        opRecords.forEach((a) => {
+          const isAfter = a.date >= datedBand.effectiveFrom;
+          const rate = isAfter ? newPayRate : regularRate;
+          if (a.isSplitRun) {
+            if (a.amDriverId === regular.driverId) {
+              payTotal += 0.5 * rate;
+              if (isAfter) daysAfter += 0.5;
+              else daysBefore += 0.5;
+            }
+            if (a.pmDriverId === regular.driverId) {
+              payTotal += 0.5 * rate;
+              if (isAfter) daysAfter += 0.5;
+              else daysBefore += 0.5;
+            }
+          } else if (a.driverId === regular.driverId) {
+            const d = a.daysValue ?? 1;
+            payTotal += d * rate;
+            if (isAfter) daysAfter += d;
+            else daysBefore += d;
+          }
+        });
+        regularAmount = Math.round(payTotal * 100) / 100;
+        if (daysBefore > 0 && daysAfter > 0) {
+          rateNote = `Rate change ${new Date(datedBand.effectiveFrom).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}: ${daysBefore}d × £${regularRate} + ${daysAfter}d × £${newPayRate}`;
+        }
+      } else {
+        regularAmount = Math.round(regular.days * regularRate * 100) / 100;
+      }
 
       // All other drivers = cover entries
       const coverArr = driverArr.filter((d) => d.driverId !== regular.driverId);
@@ -721,6 +763,25 @@ export default function Attendance() {
 
       // Legacy single temp fields — populate from first cover entry for backwards compat
       const firstCover = coverEntries[0];
+
+      // PA cost from attendance
+      const primaryPAId = route.primaryPAId;
+      const primaryPA = primaryPAId
+        ? staff.find((s) => s.id === primaryPAId)
+        : null;
+      const paPayRate = route.paPayRate || 0;
+      let paDays = 0;
+      if (primaryPAId) {
+        opRecords.forEach((a) => {
+          if (a.isSplitRun) {
+            if (a.amPaId === primaryPAId) paDays += 0.5;
+            if (a.pmPaId === primaryPAId) paDays += 0.5;
+          } else if (a.paId === primaryPAId) {
+            paDays += a.daysValue ?? 1;
+          }
+        });
+      }
+      const paAmount = Math.round(paDays * paPayRate * 100) / 100;
 
       newAllocations.push({
         id: uid(),
@@ -743,7 +804,14 @@ export default function Attendance() {
         // New multiple cover entries
         coverEntries,
         absenceReason: "",
-        notes: "Auto-generated from attendance register",
+        notes: rateNote
+          ? `Auto-generated from attendance register. ${rateNote}`
+          : "Auto-generated from attendance register",
+        paStaffId: primaryPAId || null,
+        paStaffName: primaryPA?.name || "",
+        paDays,
+        paRate: paPayRate,
+        paAmount,
         createdAt: Date.now(),
       });
     }); // ← closes Object.entries(byRoute).forEach

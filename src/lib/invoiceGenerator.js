@@ -24,15 +24,26 @@ export function generateInvoicePDF({
   const usesBands =
     bands && Object.keys(bands).length > 0 && route.rateBands?.length > 0;
 
+  const cleanRouteNum = String(route.number || "")
+    .replace(/^route\s+/i, "")
+    .trim();
   const allAdditive = usesBands && route.rateBands?.every((b) => b.isAdditive);
+  const datedBand = usesBands
+    ? route.rateBands?.find((b) => !b.isAdditive && b.effectiveFrom)
+    : null;
+  const hasDatedReplacement = !!datedBand;
+
+  const stdLineLabel = hasDatedReplacement
+    ? `Route ${cleanRouteNum} ${route.name} — Before ${new Date(datedBand.effectiveFrom).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+    : `Route ${cleanRouteNum} ${route.name} — Standard run${notes ? ` — ${notes}` : ""}`;
 
   const lines = usesBands
     ? [
-        // Standard run line — only when all bands are additive
-        ...(allAdditive && standardDays > 0
+        // Standard line — additive-only routes OR dated replacement bands
+        ...((allAdditive || hasDatedReplacement) && standardDays > 0
           ? [
               {
-                description: `Route ${route.number} ${route.name} — Standard run${notes ? ` — ${notes}` : ""}`,
+                description: stdLineLabel,
                 qty: standardDays,
                 unitPrice: Number(route.dailyRate),
                 amount:
@@ -45,7 +56,10 @@ export function generateInvoicePDF({
         ...route.rateBands
           .filter((b) => bands[b.id] && Number(bands[b.id]) > 0)
           .map((b) => ({
-            description: `Route ${route.number} ${route.name} — ${b.description}`,
+            description:
+              b.effectiveFrom && !b.isAdditive
+                ? `From ${new Date(b.effectiveFrom).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} — ${b.description}`
+                : b.description,
             qty: Number(bands[b.id]),
             unitPrice: Number(b.wsccRate),
             amount:
@@ -54,7 +68,7 @@ export function generateInvoicePDF({
       ]
     : [
         {
-          description: `Route ${route.number} ${route.name}${notes ? `\n${notes}` : ""}`,
+          description: `Route ${cleanRouteNum} ${route.name}${notes ? ` — ${notes}` : ""}`,
           qty: Number(daysWorked),
           unitPrice: Number(route.dailyRate),
           amount:

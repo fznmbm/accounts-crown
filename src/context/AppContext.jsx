@@ -249,6 +249,11 @@ const allocationFromDb = (a) => ({
   coverEntries: a.cover_entries || [],
   absenceReason: a.absence_reason || "",
   notes: a.notes,
+  paStaffId: a.pa_staff_id || null,
+  paStaffName: a.pa_staff_name || "",
+  paDays: a.pa_days || 0,
+  paRate: a.pa_rate || 0,
+  paAmount: a.pa_amount || 0,
   createdAt: a.created_at,
 });
 const allocationToDb = (a, uid) => ({
@@ -272,6 +277,11 @@ const allocationToDb = (a, uid) => ({
   cover_entries: a.coverEntries || [],
   absence_reason: a.absenceReason || "",
   notes: a.notes,
+  pa_staff_id: a.paStaffId || null,
+  pa_staff_name: a.paStaffName || null,
+  pa_days: a.paDays || 0,
+  pa_rate: a.paRate || 0,
+  pa_amount: a.paAmount || 0,
   created_at: a.createdAt,
 });
 
@@ -804,11 +814,23 @@ export function AppProvider({ children }) {
             supabase.from("attendance").select("*").eq("user_id", uid),
             supabase.from("school_holidays").select("*").eq("user_id", uid),
           ]);
-        setRawRoutes((r.data || []).map(routeFromDb));
+        setRawRoutes(
+          (r.data || [])
+            .map(routeFromDb)
+            .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)),
+        );
         setRawInvoices((inv.data || []).map(invoiceFromDb));
-        setRawStaff((st.data || []).map(staffFromDb));
+        setRawStaff(
+          (st.data || [])
+            .map(staffFromDb)
+            .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)),
+        );
         setRawPayments((pay.data || []).map(paymentFromDb));
-        setRawRemittances((rem.data || []).map(remittanceFromDb));
+        setRawRemittances(
+          (rem.data || [])
+            .map(remittanceFromDb)
+            .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+        );
 
         setRawSettings(sett.data?.data || DEFAULT_SETTINGS);
         setRawAllocations((alloc.data || []).map(allocationFromDb));
@@ -818,7 +840,11 @@ export function AppProvider({ children }) {
         setRawAuditLog((audit.data || []).map(auditFromDb));
         if (audit.error) console.error("audit_log:", audit.error);
 
-        setRawPupils((ch.data || []).map(childFromDb));
+        setRawPupils(
+          (ch.data || [])
+            .map(childFromDb)
+            .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)),
+        );
         if (ch.error) console.error("children:", ch.error);
 
         setRawAttendance((att.data || []).map(attendanceFromDb));
@@ -843,9 +869,17 @@ export function AppProvider({ children }) {
             .select("*")
             .eq("target_user_id", uid),
         ];
-        setRawStaffLicences((lic.data || []).map(staffLicenceFromDb));
+        setRawStaffLicences(
+          (lic.data || [])
+            .map(staffLicenceFromDb)
+            .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)),
+        );
         if (lic.error) console.error("staff_licences:", lic.error);
-        setRawStaffTraining((trn.data || []).map(staffTrainingFromDb));
+        setRawStaffTraining(
+          (trn.data || [])
+            .map(staffTrainingFromDb)
+            .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)),
+        );
         if (trn.error) console.error("staff_training:", trn.error);
         setRawPortalTokens((tok.data || []).map(portalTokenFromDb));
         if (tok.error) console.error("staff_portal_tokens:", tok.error);

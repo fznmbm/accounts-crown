@@ -664,7 +664,7 @@ export default function Invoices() {
                       </td>
                       <td className="td">
                         <p className="text-sm text-gray-900 dark:text-gray-100">
-                          Route {inv.routeNumber}
+                          Route {inv.routeNumber.replace(/^route\s+/i, "")}
                         </p>
                         <p className="muted">{inv.routeName}</p>
                         {inv.notes && (
@@ -813,7 +813,8 @@ export default function Invoices() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                              Route {r.number} — {r.name}
+                              Route {r.number.replace(/^route\s+/i, "")} —{" "}
+                              {r.name}
                             </p>
                             <p className="muted">PO: {r.poNumber || "—"}</p>
                           </div>
@@ -1068,6 +1069,7 @@ export default function Invoices() {
                     year: genYear,
                     bands,
                     notes: genNotes[r.id] || "",
+                    standardDays: Number(genDays[r.id] || 0),
                   });
 
                   // Build invoice record
@@ -1358,7 +1360,8 @@ export default function Invoices() {
               <div className="flex justify-between">
                 <span className="text-gray-500 dark:text-gray-400">Route</span>
                 <span>
-                  Route {revising.routeNumber} — {revising.routeName}
+                  Route {revising.routeNumber.replace(/^route\s+/i, "")} —{" "}
+                  {revising.routeName}
                 </span>
               </div>
               <div className="flex justify-between">
