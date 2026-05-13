@@ -1304,13 +1304,51 @@ export default function Attendance() {
                               {att &&
                                 (att.paId ||
                                   att.externalPAName ||
+                                  att.isExternalPA ||
                                   att.amPaId ||
-                                  att.pmPaId) && (
-                                  <span
-                                    title={`PA: ${att.paName || att.externalPAName || att.amPaName || "assigned"}`}
-                                    className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-purple-400 dark:bg-purple-500"
-                                  />
-                                )}
+                                  att.pmPaId ||
+                                  att.amPaName ||
+                                  att.pmPaName) &&
+                                (() => {
+                                  // Determine PA type for colour
+                                  const isExternal =
+                                    att.isExternalPA ||
+                                    att.externalPAName ||
+                                    (att.isSplitRun &&
+                                      ((!att.amPaId && att.amPaName) ||
+                                        (!att.pmPaId && att.pmPaName)));
+                                  const isCover = !isExternal && att.isCoverPA;
+                                  const dotColour = isExternal
+                                    ? "bg-red-400 dark:bg-red-500"
+                                    : isCover
+                                      ? "bg-amber-400 dark:bg-amber-500"
+                                      : "bg-purple-400 dark:bg-purple-500";
+                                  // Build tooltip
+                                  let paLabel = "";
+                                  if (att.isSplitRun) {
+                                    const am = att.amPaName
+                                      ? `AM: ${att.amPaName}`
+                                      : "";
+                                    const pm =
+                                      att.pmPaName &&
+                                      att.pmPaName !== att.amPaName
+                                        ? `PM: ${att.pmPaName}`
+                                        : "";
+                                    paLabel =
+                                      [am, pm].filter(Boolean).join(" / ") ||
+                                      "PA assigned";
+                                  } else {
+                                    paLabel = att.isExternalPA
+                                      ? `External PA: ${att.externalPAName || "?"}`
+                                      : att.paName || "PA assigned";
+                                  }
+                                  return (
+                                    <span
+                                      title={`PA: ${paLabel}`}
+                                      className={`absolute bottom-0.5 right-0.5 w-1.5 h-1.5 rounded-full ${dotColour}`}
+                                    />
+                                  );
+                                })()}
                             </button>
                           )}
                         </td>
