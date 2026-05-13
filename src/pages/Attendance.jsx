@@ -259,6 +259,14 @@ export default function Attendance() {
         !!existing?.pmDriverName
           ? true
           : false,
+      isExternalAmPA:
+        existing?.isSplitRun && !existing?.amPaId && !!existing?.amPaName
+          ? true
+          : false,
+      isExternalPmPA:
+        existing?.isSplitRun && !existing?.pmPaId && !!existing?.pmPaName
+          ? true
+          : false,
       amPaId: existing?.amPaId || route.primaryPAId || "",
       amPaName: existing?.amPaName || primaryPA?.name || "",
       pmPaId: existing?.pmPaId || "",
@@ -1290,9 +1298,19 @@ export default function Attendance() {
                                   att,
                                 });
                               }}
-                              className={`w-full h-9 rounded-lg border text-xs font-semibold transition-all ${STATUS_STYLE[status]} ${isOpen ? "ring-2 ring-blue-400 ring-offset-1" : "hover:opacity-80"}`}
+                              className={`w-full h-9 rounded-lg border text-xs font-semibold transition-all relative ${STATUS_STYLE[status]} ${isOpen ? "ring-2 ring-blue-400 ring-offset-1" : "hover:opacity-80"}`}
                             >
                               {label}
+                              {att &&
+                                (att.paId ||
+                                  att.externalPAName ||
+                                  att.amPaId ||
+                                  att.pmPaId) && (
+                                  <span
+                                    title={`PA: ${att.paName || att.externalPAName || att.amPaName || "assigned"}`}
+                                    className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-purple-400 dark:bg-purple-500"
+                                  />
+                                )}
                             </button>
                           )}
                         </td>
@@ -1732,27 +1750,58 @@ export default function Attendance() {
                           </label>
                         </FormField>
                         <FormField label="AM PA">
-                          <select
-                            className="input"
-                            value={form.amPaId || ""}
-                            onChange={(e) => {
-                              const s = staff.find(
-                                (x) => x.id === e.target.value,
-                              );
-                              setForm((p) => ({
-                                ...p,
-                                amPaId: e.target.value,
-                                amPaName: s?.name || "",
-                              }));
-                            }}
-                          >
-                            <option value="">No PA</option>
-                            {pas.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.name}
-                              </option>
-                            ))}
-                          </select>
+                          {form.isExternalAmPA ? (
+                            <input
+                              className="input"
+                              value={form.amPaName || ""}
+                              onChange={(e) =>
+                                setForm((p) => ({
+                                  ...p,
+                                  amPaName: e.target.value,
+                                  amPaId: "",
+                                }))
+                              }
+                              placeholder="Type PA name…"
+                            />
+                          ) : (
+                            <select
+                              className="input"
+                              value={form.amPaId || ""}
+                              onChange={(e) => {
+                                const s = staff.find(
+                                  (x) => x.id === e.target.value,
+                                );
+                                setForm((p) => ({
+                                  ...p,
+                                  amPaId: e.target.value,
+                                  amPaName: s?.name || "",
+                                }));
+                              }}
+                            >
+                              <option value="">No PA</option>
+                              {pas.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          <label className="flex items-center gap-1.5 mt-1 text-xs text-gray-400 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={form.isExternalAmPA || false}
+                              onChange={(e) =>
+                                setForm((p) => ({
+                                  ...p,
+                                  isExternalAmPA: e.target.checked,
+                                  amPaId: "",
+                                  amPaName: "",
+                                }))
+                              }
+                              className="w-3 h-3 rounded"
+                            />
+                            External PA
+                          </label>
                         </FormField>
                       </FormGrid>
                     </div>
@@ -1816,27 +1865,58 @@ export default function Attendance() {
                           </label>
                         </FormField>
                         <FormField label="PM PA">
-                          <select
-                            className="input"
-                            value={form.pmPaId || ""}
-                            onChange={(e) => {
-                              const s = staff.find(
-                                (x) => x.id === e.target.value,
-                              );
-                              setForm((p) => ({
-                                ...p,
-                                pmPaId: e.target.value,
-                                pmPaName: s?.name || "",
-                              }));
-                            }}
-                          >
-                            <option value="">No PA</option>
-                            {pas.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.name}
-                              </option>
-                            ))}
-                          </select>
+                          {form.isExternalPmPA ? (
+                            <input
+                              className="input"
+                              value={form.pmPaName || ""}
+                              onChange={(e) =>
+                                setForm((p) => ({
+                                  ...p,
+                                  pmPaName: e.target.value,
+                                  pmPaId: "",
+                                }))
+                              }
+                              placeholder="Type PA name…"
+                            />
+                          ) : (
+                            <select
+                              className="input"
+                              value={form.pmPaId || ""}
+                              onChange={(e) => {
+                                const s = staff.find(
+                                  (x) => x.id === e.target.value,
+                                );
+                                setForm((p) => ({
+                                  ...p,
+                                  pmPaId: e.target.value,
+                                  pmPaName: s?.name || "",
+                                }));
+                              }}
+                            >
+                              <option value="">No PA</option>
+                              {pas.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          <label className="flex items-center gap-1.5 mt-1 text-xs text-gray-400 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={form.isExternalPmPA || false}
+                              onChange={(e) =>
+                                setForm((p) => ({
+                                  ...p,
+                                  isExternalPmPA: e.target.checked,
+                                  pmPaId: "",
+                                  pmPaName: "",
+                                }))
+                              }
+                              className="w-3 h-3 rounded"
+                            />
+                            External PA
+                          </label>
                         </FormField>
                       </FormGrid>
                     </div>
