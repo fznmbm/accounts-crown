@@ -1850,6 +1850,16 @@ export default function Attendance() {
                             amDriverName: null,
                             pmDriverId: null,
                             pmDriverName: null,
+                            paId: p.amPaId || p.paId,
+                            paName: p.amPaName || p.paName,
+                            isCoverPA:
+                              !!(p.amPaId || p.paId) &&
+                              (p.amPaId || p.paId) !==
+                                (editing?.route?.primaryPAId || ""),
+                            amPaId: null,
+                            amPaName: null,
+                            pmPaId: null,
+                            pmPaName: null,
                           }))
                         }
                       >
