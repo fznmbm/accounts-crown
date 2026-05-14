@@ -1067,18 +1067,18 @@ export default function Invoices() {
                   const total = Math.round((netTotal + vat) * 100) / 100;
 
                   // Generate the PDF
-                  generateInvoicePDF({
-                    invoiceNumber: invNumber,
-                    route: r,
-                    settings,
-                    daysWorked,
-                    invoiceDate: new Date(genDate).toLocaleDateString("en-GB"),
-                    month: genMonth,
-                    year: genYear,
-                    bands,
-                    notes: genNotes[r.id] || "",
-                    standardDays: Number(genDays[r.id] || 0),
-                  });
+                  // generateInvoicePDF({
+                  //   invoiceNumber: invNumber,
+                  //   route: r,
+                  //   settings,
+                  //   daysWorked,
+                  //   invoiceDate: new Date(genDate).toLocaleDateString("en-GB"),
+                  //   month: genMonth,
+                  //   year: genYear,
+                  //   bands,
+                  //   notes: genNotes[r.id] || "",
+                  //   standardDays: Number(genDays[r.id] || 0),
+                  // });
 
                   // Build invoice record
                   newInvoices.push({
