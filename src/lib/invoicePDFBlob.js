@@ -30,8 +30,10 @@ function buildLines({ route, bands, notes, standardDays, daysWorked }) {
   const usesBands =
     bands && Object.keys(bands).length > 0 && route.rateBands?.length > 0;
 
+  let lines = [];
+
   if (!usesBands) {
-    return [
+    lines = [
       {
         description: `Route ${rNum} ${route.name}${notes ? ` — ${notes}` : ""}`,
         qty: Number(daysWorked),
@@ -40,48 +42,62 @@ function buildLines({ route, bands, notes, standardDays, daysWorked }) {
           Math.round(Number(daysWorked) * Number(route.dailyRate) * 100) / 100,
       },
     ];
+  } else {
+    const allAdditive = route.rateBands.every((b) => b.isAdditive);
+    const datedBand = route.rateBands.find(
+      (b) => !b.isAdditive && b.effectiveFrom,
+    );
+    const hasDatedReplacement = !!datedBand;
+
+    const stdLabel = hasDatedReplacement
+      ? `Route ${rNum} ${route.name} — Before ${new Date(
+          datedBand.effectiveFrom,
+        ).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+      : `Route ${rNum} ${route.name} — Standard run${notes ? ` — ${notes}` : ""}`;
+
+    lines = [
+      ...((allAdditive || hasDatedReplacement) && standardDays > 0
+        ? [
+            {
+              description: stdLabel,
+              qty: standardDays,
+              unitPrice: Number(route.dailyRate),
+              amount:
+                Math.round(standardDays * Number(route.dailyRate) * 100) / 100,
+            },
+          ]
+        : []),
+      ...route.rateBands
+        .filter((b) => bands[b.id] && Number(bands[b.id]) > 0)
+        .map((b) => ({
+          description:
+            b.effectiveFrom && !b.isAdditive
+              ? `From ${new Date(b.effectiveFrom).toLocaleDateString("en-GB", {
+                  day: "numeric",
+                  month: "short",
+                })} — ${b.description}`
+              : b.description,
+          qty: Number(bands[b.id]),
+          unitPrice: Number(b.wsccRate),
+          amount:
+            Math.round(Number(bands[b.id]) * Number(b.wsccRate) * 100) / 100,
+        })),
+    ];
   }
 
-  const allAdditive = route.rateBands.every((b) => b.isAdditive);
-  const datedBand = route.rateBands.find(
-    (b) => !b.isAdditive && b.effectiveFrom,
-  );
-  const hasDatedReplacement = !!datedBand;
+  // PA line — add when route has a PA assigned with a WSCC rate
+  const totalQty =
+    Number(daysWorked) > 0 ? Number(daysWorked) : Number(standardDays);
+  if (route.primaryPAId && Number(route.paDailyRate || 0) > 0 && totalQty > 0) {
+    lines.push({
+      description: `Route ${rNum} ${route.name} — PA`,
+      qty: totalQty,
+      unitPrice: Number(route.paDailyRate),
+      amount: Math.round(totalQty * Number(route.paDailyRate) * 100) / 100,
+    });
+  }
 
-  const stdLabel = hasDatedReplacement
-    ? `Route ${rNum} ${route.name} — Before ${new Date(
-        datedBand.effectiveFrom,
-      ).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
-    : `Route ${rNum} ${route.name} — Standard run${notes ? ` — ${notes}` : ""}`;
-
-  return [
-    ...((allAdditive || hasDatedReplacement) && standardDays > 0
-      ? [
-          {
-            description: stdLabel,
-            qty: standardDays,
-            unitPrice: Number(route.dailyRate),
-            amount:
-              Math.round(standardDays * Number(route.dailyRate) * 100) / 100,
-          },
-        ]
-      : []),
-    ...route.rateBands
-      .filter((b) => bands[b.id] && Number(bands[b.id]) > 0)
-      .map((b) => ({
-        description:
-          b.effectiveFrom && !b.isAdditive
-            ? `From ${new Date(b.effectiveFrom).toLocaleDateString("en-GB", {
-                day: "numeric",
-                month: "short",
-              })} — ${b.description}`
-            : b.description,
-        qty: Number(bands[b.id]),
-        unitPrice: Number(b.wsccRate),
-        amount:
-          Math.round(Number(bands[b.id]) * Number(b.wsccRate) * 100) / 100,
-      })),
-  ];
+  return lines;
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────

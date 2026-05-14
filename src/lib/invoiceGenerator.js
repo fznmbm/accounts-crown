@@ -77,6 +77,18 @@ export function generateInvoicePDF({
         },
       ];
 
+  // PA line — add when route has a PA assigned with a WSCC rate
+  const totalQty =
+    Number(daysWorked) > 0 ? Number(daysWorked) : Number(standardDays);
+  if (route.primaryPAId && Number(route.paDailyRate || 0) > 0 && totalQty > 0) {
+    lines.push({
+      description: `Route ${cleanRouteNum} ${route.name} — PA`,
+      qty: totalQty,
+      unitPrice: Number(route.paDailyRate),
+      amount: Math.round(totalQty * Number(route.paDailyRate) * 100) / 100,
+    });
+  }
+
   const netTotal =
     Math.round(lines.reduce((s, l) => s + l.amount, 0) * 100) / 100;
   const vat = Math.round(netTotal * (vatRate / 100) * 100) / 100;

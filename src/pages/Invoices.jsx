@@ -1053,15 +1053,27 @@ export default function Invoices() {
                       (s, b) => s + (Number(bands[b.id]) || 0),
                       0,
                     );
-                    netTotal = Math.round((stdAmount + bandAmount) * 100) / 100;
                     daysWorked = stdDays + bandDays;
+                    const paAmount = r.primaryPAId
+                      ? Math.round(
+                          daysWorked * Number(r.paDailyRate || 0) * 100,
+                        ) / 100
+                      : 0;
+                    netTotal =
+                      Math.round((stdAmount + bandAmount + paAmount) * 100) /
+                      100;
                     unitPrice = daysWorked > 0 ? netTotal / daysWorked : 0;
                   } else {
                     daysWorked = Number(genDays[r.id] || 0);
                     unitPrice = Number(r.dailyRate);
-                    netTotal = Math.round(daysWorked * unitPrice * 100) / 100;
+                    const paAmount = r.primaryPAId
+                      ? Math.round(
+                          daysWorked * Number(r.paDailyRate || 0) * 100,
+                        ) / 100
+                      : 0;
+                    netTotal =
+                      Math.round(daysWorked * unitPrice * 100) / 100 + paAmount;
                   }
-
                   const vat =
                     Math.round(netTotal * (vatRate / 100) * 100) / 100;
                   const total = Math.round((netTotal + vat) * 100) / 100;
