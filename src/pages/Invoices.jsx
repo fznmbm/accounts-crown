@@ -17,6 +17,8 @@ import {
   cleanNum,
 } from "../lib/utils";
 import { generateInvoicePDF } from "../lib/invoiceGenerator";
+import { generateInvoicePDFBlob } from "../lib/invoicePDFBlob";
+import JSZip from "jszip";
 
 const STATUS_OPTS = ["unpaid", "partial", "paid"];
 
@@ -66,6 +68,7 @@ export default function Invoices() {
   const [genDays, setGenDays] = useState({});
   const [genBandDays, setGenBandDays] = useState({});
   const [genNotes, setGenNotes] = useState({});
+  const [generating, setGenerating] = useState(false);
 
   const nextInvoiceNum = () => {
     const nums = invoices.map((x) => parseInt(x.invoiceNumber)).filter(Boolean);
@@ -987,12 +990,17 @@ export default function Invoices() {
             </div>
           </div>
           <ModalFooter>
-            <button className="btn-secondary" onClick={() => setShowGen(false)}>
+            <button
+              className="btn-secondary"
+              onClick={() => setShowGen(false)}
+              disabled={generating}
+            >
               Cancel
             </button>
             <button
               className="btn-primary"
               disabled={
+                generating ||
                 !genStartNum ||
                 routes.filter(
                   (r) =>
@@ -1002,7 +1010,7 @@ export default function Invoices() {
                       Object.keys(genBandDays[r.id] || {}).length > 0),
                 ).length === 0
               }
-              onClick={() => {
+              onClick={async () => {
                 const toGenerate = routes.filter(
                   (r) =>
                     r.active &&
@@ -1095,7 +1103,7 @@ export default function Invoices() {
                   });
                 });
 
-                // Check for duplicates before saving
+                // Check for duplicates
                 const existing = new Set(invoices.map((x) => x.invoiceNumber));
                 const duplicates = newInvoices.filter((x) =>
                   existing.has(x.invoiceNumber),
@@ -1109,36 +1117,86 @@ export default function Invoices() {
                     .map((x) => `#${x.invoiceNumber}`)
                     .join(", ");
                   const proceed = confirm(
-                    `⚠ ${duplicates.length} invoice(s) already exist: ${nums}\n\nSkip duplicates and save ${fresh.length} new invoice(s)?`,
+                    `⚠ ${duplicates.length} invoice(s) already exist: ${nums}\n\nSkip duplicates and generate ${fresh.length} new invoice(s)?`,
                   );
                   if (!proceed) return;
                 }
 
-                if (fresh.length > 0) {
-                  setInvoices([...invoices, ...fresh]);
+                if (fresh.length === 0) {
+                  alert("All invoices already exist — nothing to generate.");
+                  return;
                 }
 
-                setShowGen(false);
+                setGenerating(true);
+                try {
+                  const zip = new JSZip();
+                  const folder = zip.folder(
+                    `Crown-Cars-Invoices-${MONTHS[genMonth]}-${genYear}`,
+                  );
+                  for (const inv of fresh) {
+                    const blob = generateInvoicePDFBlob({
+                      invoiceNumber: inv.invoiceNumber,
+                      route: routes.find((r) => r.number === inv.routeNumber),
+                      settings,
+                      daysWorked: inv.daysWorked,
+                      invoiceDate: new Date(genDate).toLocaleDateString(
+                        "en-GB",
+                      ),
+                      month: genMonth,
+                      year: genYear,
+                      bands:
+                        genBandDays[
+                          routes.find((r) => r.number === inv.routeNumber)?.id
+                        ] || {},
+                      notes: inv.notes || "",
+                      standardDays: Number(
+                        genDays[
+                          routes.find((r) => r.number === inv.routeNumber)?.id
+                        ] || 0,
+                      ),
+                    });
+                    folder.file(
+                      `INV-${inv.invoiceNumber}-R${cleanNum(inv.routeNumber)}-${genYear}-${String(genMonth + 1).padStart(2, "0")}.pdf`,
+                      blob,
+                    );
+                  }
+                  const zipBlob = await zip.generateAsync({ type: "blob" });
+                  const url = URL.createObjectURL(zipBlob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `Crown-Cars-Invoices-${MONTHS[genMonth]}-${genYear}.zip`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  setInvoices([...invoices, ...fresh]);
+                  setShowGen(false);
+                } finally {
+                  setGenerating(false);
+                }
               }}
             >
-              Generate{" "}
-              {routes.filter(
-                (r) =>
-                  r.active &&
-                  !r.suspended &&
-                  (genDays[r.id] ||
-                    Object.keys(genBandDays[r.id] || {}).length > 0),
-              ).length || ""}{" "}
-              PDF
-              {routes.filter(
-                (r) =>
-                  r.active &&
-                  !r.suspended &&
-                  (genDays[r.id] ||
-                    Object.keys(genBandDays[r.id] || {}).length > 0),
-              ).length !== 1
-                ? "s"
-                : ""}
+              {generating
+                ? "Generating…"
+                : `Generate ${
+                    routes.filter(
+                      (r) =>
+                        r.active &&
+                        !r.suspended &&
+                        (genDays[r.id] ||
+                          Object.keys(genBandDays[r.id] || {}).length > 0),
+                    ).length || ""
+                  } PDF${
+                    routes.filter(
+                      (r) =>
+                        r.active &&
+                        !r.suspended &&
+                        (genDays[r.id] ||
+                          Object.keys(genBandDays[r.id] || {}).length > 0),
+                    ).length !== 1
+                      ? "s"
+                      : ""
+                  } → ZIP`}
             </button>
           </ModalFooter>
         </Modal>

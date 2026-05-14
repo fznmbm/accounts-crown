@@ -355,7 +355,11 @@ export default function Allocations() {
   // Filter by month/year
   const filtered = allocations
     .filter((a) => a.month === monthF && a.year === yearF)
-    .sort((a, b) => a.routeNumber?.localeCompare(b.routeNumber));
+    .sort((a, b) => {
+      const ai = routes.findIndex((r) => r.id === a.routeId);
+      const bi = routes.findIndex((r) => r.id === b.routeId);
+      return (ai === -1 ? 9999 : ai) - (bi === -1 ? 9999 : bi);
+    });
 
   // Month totals
   const totalRegular = filtered.reduce((s, a) => s + (a.regularAmount || 0), 0);
