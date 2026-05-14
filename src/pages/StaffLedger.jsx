@@ -188,7 +188,7 @@ export default function StaffLedger() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* ── Left: staff list ─────────────────────────────────────────── */}
-        <div className="w-72 flex-shrink-0 border-r border-gray-200 dark:border-gray-800 overflow-y-auto bg-white dark:bg-gray-900">
+        <div className="w-48 md:w-72 flex-shrink-0 border-r border-gray-200 dark:border-gray-800 overflow-y-auto bg-white dark:bg-gray-900">
           {summaries.length === 0 ? (
             <div className="p-6 text-sm text-gray-400 dark:text-gray-500 text-center">
               No staff added yet

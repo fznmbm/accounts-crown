@@ -166,7 +166,7 @@ export default function Dashboard() {
 
       <div className="page-body">
         {/* KPIs */}
-        <div className="grid grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <MetricCard
             label="Total invoiced"
             value={fmt(invoiced)}
@@ -383,7 +383,7 @@ export default function Dashboard() {
         )}
 
         {/* Cards grid */}
-        <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Recent remittances */}
           <div className="card p-5 flex flex-col max-h-72">
             <div

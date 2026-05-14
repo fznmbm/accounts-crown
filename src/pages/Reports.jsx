@@ -220,8 +220,6 @@ export default function Reports() {
         netInv,
         totalDays,
         invoiceCount: inv.length,
-        regularCost,
-        tempCost,
         totalStaffCost,
         routeProfit,
         margin,
@@ -338,7 +336,7 @@ export default function Reports() {
 
       <div className="page-body">
         {/* Annual KPIs */}
-        <div className="grid grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <MetricCard
             label={`${year} invoiced`}
             value={fmt(totals.invoiced)}
