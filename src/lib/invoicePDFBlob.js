@@ -143,21 +143,28 @@ export function generateInvoicePDFBlob({
   doc.text(invoiceDate, M + 16, y + 2);
   y += 8;
 
-  [
-    "To: West Sussex County Council",
-    "County Hall",
-    "West Street",
-    "Chichester",
-    "PO19 1RQ",
-  ].forEach((line) => {
+  doc.setFont("helvetica", "bold");
+  doc.text("To: ", M, y);
+  doc.setFont("helvetica", "normal");
+  doc.text("West Sussex County Council", M + doc.getTextWidth("To: "), y);
+  y += 5;
+  ["County Hall", "West Street", "Chichester", "PO19 1RQ"].forEach((line) => {
     doc.text(line, M, y);
     y += 5;
   });
 
   y += 3;
 
+  doc.setFont("helvetica", "bold");
+  doc.text("From: ", M, y);
+  doc.setFont("helvetica", "normal");
+  doc.text(
+    settings?.companyName || "Crown Cars Ltd",
+    M + doc.getTextWidth("From: "),
+    y,
+  );
+  y += 5;
   [
-    `From: ${settings?.companyName || "Crown Cars Ltd"}`,
     ...addressParts,
     settings?.phone ? `Phone: ${settings.phone}` : null,
     settings?.email ? `Email: ${settings.email}` : null,
