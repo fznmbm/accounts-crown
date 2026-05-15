@@ -3,6 +3,8 @@ import { useApp } from "../context/AppContext";
 import PageHeader from "../components/PageHeader";
 import Modal, { FormField, FormGrid, ModalFooter } from "../components/Modal";
 import EmptyState from "../components/EmptyState";
+import { toast } from "sonner";
+import { useConfirm } from "../context/ConfirmContext";
 import { uid, fmtD } from "../lib/utils";
 import DocumentUploader from "../components/DocumentUploader";
 
@@ -216,11 +218,23 @@ export default function Compliance() {
         ? staffLicences.map((l) => (l.id === licEditing.id ? record : l))
         : [...staffLicences, record],
     );
+    toast.success(
+      licEditing ? "Licence record updated." : "Licence record added.",
+    );
     setShowLicModal(false);
   };
-  const delLic = (id) => {
-    if (confirm("Delete this licence record?"))
+  const delLic = async (id) => {
+    const lic = staffLicences.find((l) => l.id === id);
+    const confirmed = await showConfirm({
+      title: "Delete this licence record?",
+      message: `${lic?.authority || "This licence"} record will be permanently removed.`,
+      type: "danger",
+      confirmLabel: "Delete",
+    });
+    if (confirmed) {
       setStaffLicences(staffLicences.filter((l) => l.id !== id));
+      toast.success("Licence record deleted.");
+    }
   };
 
   // ── Training CRUD ─────────────────────────────────────────────────────────
@@ -259,12 +273,26 @@ export default function Compliance() {
         ? staffTraining.map((t) => (t.id === trnEditing.id ? record : t))
         : [...staffTraining, record],
     );
+    toast.success(
+      trnEditing ? "Training record updated." : "Training record added.",
+    );
     setShowTrnModal(false);
   };
-  const delTrn = (id) => {
-    if (confirm("Delete this training record?"))
+  const delTrn = async (id) => {
+    const trn = staffTraining.find((t) => t.id === id);
+    const confirmed = await showConfirm({
+      title: "Delete this training record?",
+      message: `${trn?.trainingType || "This training record"} will be permanently removed.`,
+      type: "danger",
+      confirmLabel: "Delete",
+    });
+    if (confirmed) {
       setStaffTraining(staffTraining.filter((t) => t.id !== id));
+      toast.success("Training record deleted.");
+    }
   };
+
+  const showConfirm = useConfirm();
 
   const lf = (k) => (e) => setLicForm((p) => ({ ...p, [k]: e.target.value }));
   const tf = (k) => (e) => setTrnForm((p) => ({ ...p, [k]: e.target.value }));

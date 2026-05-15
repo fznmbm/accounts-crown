@@ -4,6 +4,8 @@ import PageHeader from "../components/PageHeader";
 import Modal, { FormField, FormGrid, ModalFooter } from "../components/Modal";
 import Badge from "../components/Badge";
 import EmptyState from "../components/EmptyState";
+import { toast } from "sonner";
+import { useConfirm } from "../context/ConfirmContext";
 import { uid, fmt } from "../lib/utils";
 import DocumentUploader from "../components/DocumentUploader";
 
@@ -41,6 +43,8 @@ export default function Staff() {
   const [search, setSearch] = useState("");
   const [typeF, setTypeF] = useState("all");
 
+  const showConfirm = useConfirm();
+
   const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
   const getToken = (staffId) =>
@@ -65,23 +69,26 @@ export default function Staff() {
     const token = await generateToken(s);
     const link = `${window.location.origin}/staff/${token.token}`;
     await navigator.clipboard.writeText(link);
-    alert(
-      `✓ Portal link copied!\n\n${link}\n\nSend this to ${s.name} — they can use it every month.`,
+    toast.success(
+      `Portal link copied for ${s.name}. Send them this link — they can use it every month.`,
     );
   };
 
-  const revokeToken = (staffId) => {
-    if (
-      !confirm(
-        "Revoke this driver's portal link? They will no longer be able to submit invoices until a new link is generated.",
-      )
-    )
-      return;
+  const revokeToken = async (staffId) => {
+    const s = staff.find((x) => x.id === staffId);
+    const confirmed = await showConfirm({
+      title: "Revoke portal link?",
+      message: `${s?.name || "This driver"} will no longer be able to submit invoices until a new link is generated.`,
+      type: "danger",
+      confirmLabel: "Revoke",
+    });
+    if (!confirmed) return;
     setPortalTokens(
       portalTokens.map((t) =>
         t.staffId === staffId ? { ...t, active: false } : t,
       ),
     );
+    toast.success("Portal link revoked.");
   };
   const open = () => {
     setForm(EMPTY);
@@ -110,10 +117,11 @@ export default function Staff() {
         ? staff.map((s) => (s.id === editing.id ? record : s))
         : [...staff, record],
     );
+    toast.success(editing ? "Staff member updated." : "Staff member added.");
     close();
   };
 
-  const del = (id) => {
+  const del = async (id) => {
     const s = staff.find((x) => x.id === id);
     const payCount = payments.filter((p) => p.staffId === id).length;
     const allocCount = allocations.filter(
@@ -122,16 +130,29 @@ export default function Staff() {
         a.coverEntries?.some((c) => c.staffId === id) ||
         a.tempStaffId === id,
     ).length;
-    let msg = `Remove ${s?.name}?`;
-    if (payCount > 0 || allocCount > 0) {
-      msg = `Remove ${s?.name}?\n\n⚠ Warning:\n`;
-      if (allocCount > 0)
-        msg += `• ${allocCount} allocation(s) reference this staff member\n`;
-      if (payCount > 0)
-        msg += `• ${payCount} payment(s) will become unlinked\n`;
-      msg += "\nTheir history will remain but show as unknown staff.";
+    const warnings = [];
+    if (allocCount > 0)
+      warnings.push(
+        `${allocCount} allocation${allocCount !== 1 ? "s" : ""} reference this staff member.`,
+      );
+    if (payCount > 0)
+      warnings.push(
+        `${payCount} payment${payCount !== 1 ? "s" : ""} will become unlinked.`,
+      );
+    const message =
+      warnings.length > 0
+        ? `${warnings.join(" ")} Their history will remain but show as unknown staff.`
+        : "This staff member will be permanently removed.";
+    const confirmed = await showConfirm({
+      title: `Remove ${s?.name}?`,
+      message,
+      type: "danger",
+      confirmLabel: "Remove",
+    });
+    if (confirmed) {
+      setStaff(staff.filter((x) => x.id !== id));
+      toast.success(`${s?.name} removed.`);
     }
-    if (confirm(msg)) setStaff(staff.filter((x) => x.id !== id));
   };
   const totalPaid = (id) =>
     payments.filter((p) => p.staffId === id).reduce((s, p) => s + p.amount, 0);

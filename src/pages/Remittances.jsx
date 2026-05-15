@@ -5,6 +5,8 @@ import Modal, { ModalFooter } from "../components/Modal";
 import EmptyState from "../components/EmptyState";
 import DropZone from "../components/DropZone";
 import { parseRemittancePDF } from "../lib/pdfParser";
+import { toast } from "sonner";
+import { useConfirm } from "../context/ConfirmContext";
 import { uid, fmt, fmtD } from "../lib/utils";
 
 // Normalize invoice numbers for matching — strips prefixes/suffixes.
@@ -21,6 +23,7 @@ export default function Remittances() {
   const [parseErr, setParseErr] = useState("");
   const [preview, setPreview] = useState(null);
   const [detail, setDetail] = useState(null);
+  const showConfirm = useConfirm();
 
   const handleFile = async (files) => {
     setParsing(true);
@@ -39,18 +42,19 @@ export default function Remittances() {
     setParsing(false);
   };
 
-  const confirmSave = () => {
+  const confirmSave = async () => {
     if (!preview) return;
     const duplicate = remittances.find(
       (r) => r.paymentNumber === preview.paymentNumber,
     );
     if (duplicate) {
-      if (
-        !confirm(
-          `Payment #${preview.paymentNumber} has already been imported. Import again?`,
-        )
-      )
-        return;
+      const confirmed = await showConfirm({
+        title: `Payment #${preview.paymentNumber} already imported`,
+        message: "This remittance has already been imported. Import again?",
+        type: "warning",
+        confirmLabel: "Import again",
+      });
+      if (!confirmed) return;
     }
     const rem = {
       id: uid(),
@@ -78,17 +82,26 @@ export default function Remittances() {
     setRemittances([...remittances, rem]);
     setInvoices(updatedInvoices);
     setPreview(null);
+    toast.success(
+      `Remittance #${rem.paymentNumber} saved — ${rem.items.length} invoices reconciled.`,
+    );
   };
 
-  const del = (id) => {
+  const del = async (id) => {
     const rem = remittances.find((r) => r.id === id);
     if (!rem) return;
     const affectedInvoices = invoices.filter((inv) => inv.remittanceId === id);
-    const msg =
+    const message =
       affectedInvoices.length > 0
-        ? `Delete this remittance?\n\n${affectedInvoices.length} invoice(s) are marked as paid by this remittance.\n\nClick OK to delete and reset those invoices back to "unpaid".\nClick Cancel to keep.`
-        : "Delete this remittance?";
-    if (!confirm(msg)) return;
+        ? `${affectedInvoices.length} invoice${affectedInvoices.length !== 1 ? "s" : ""} are marked as paid by this remittance and will be reset to unpaid.`
+        : "This remittance will be permanently removed.";
+    const confirmed = await showConfirm({
+      title: `Delete remittance #${rem.paymentNumber}?`,
+      message,
+      type: "danger",
+      confirmLabel: "Delete",
+    });
+    if (!confirmed) return;
     setRemittances(remittances.filter((r) => r.id !== id));
     if (affectedInvoices.length > 0) {
       setInvoices(
@@ -99,6 +112,7 @@ export default function Remittances() {
         ),
       );
     }
+    toast.success(`Remittance #${rem.paymentNumber} deleted.`);
   };
 
   const sorted = [...remittances].sort((a, b) => b.createdAt - a.createdAt);

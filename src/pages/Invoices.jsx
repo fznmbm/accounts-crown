@@ -6,6 +6,8 @@ import Badge from "../components/Badge";
 import EmptyState from "../components/EmptyState";
 import DropZone from "../components/DropZone";
 import { parseInvoicePDF } from "../lib/pdfParser";
+import { toast } from "sonner";
+import { useConfirm } from "../context/ConfirmContext";
 import {
   uid,
   fmt,
@@ -69,6 +71,8 @@ export default function Invoices() {
   const [genBandDays, setGenBandDays] = useState({});
   const [genNotes, setGenNotes] = useState({});
   const [generating, setGenerating] = useState(false);
+
+  const showConfirm = useConfirm();
 
   const nextInvoiceNum = () => {
     const nums = invoices.map((x) => parseInt(x.invoiceNumber)).filter(Boolean);
@@ -182,7 +186,7 @@ export default function Invoices() {
     const newNumber = `${revising.invoiceNumber}-R1`;
     const existing = invoices.find((x) => x.invoiceNumber === newNumber);
     if (existing) {
-      alert(`Revised invoice ${newNumber} already exists.`);
+      toast.error(`Revised invoice ${newNumber} already exists.`);
       return;
     }
     // Mark original as revised
@@ -212,7 +216,7 @@ export default function Invoices() {
     );
     setShowRevise(false);
     setRevising(null);
-    // Open edit modal on the new revised invoice so user can correct the days/amount
+    toast.success(`Revision #${newNumber} created. Update the details below.`);
     openEdit(revised);
   };
 
@@ -272,13 +276,20 @@ export default function Invoices() {
     close();
   };
 
-  const del = (id) => {
-    if (confirm("Delete this invoice?")) {
-      const inv = invoices.find((x) => x.id === id);
+  const del = async (id) => {
+    const inv = invoices.find((x) => x.id === id);
+    const confirmed = await showConfirm({
+      title: `Delete invoice #${inv?.invoiceNumber}?`,
+      message: `Route ${cleanNum(inv?.routeNumber || "")} — ${inv?.routeName || ""}. This cannot be undone.`,
+      type: "danger",
+      confirmLabel: "Delete",
+    });
+    if (confirmed) {
       setInvoices(
         invoices.filter((x) => x.id !== id),
         { action: "delete", id, label: `Invoice #${inv?.invoiceNumber}` },
       );
+      toast.success(`Invoice #${inv?.invoiceNumber} deleted.`);
     }
   };
 
@@ -311,21 +322,24 @@ export default function Invoices() {
   const updateRow = (id, key, val) =>
     setPreview((p) => p.map((r) => (r._id === id ? { ...r, [key]: val } : r)));
 
-  const confirmImport = () => {
+  const confirmImport = async () => {
     const existing = new Set(invoices.map((x) => x.invoiceNumber));
     const duplicates = preview.filter((r) => existing.has(r.invoiceNumber));
     const fresh = preview.filter((r) => !existing.has(r.invoiceNumber));
 
     if (duplicates.length > 0) {
       const nums = duplicates.map((r) => `#${r.invoiceNumber}`).join(", ");
-      const proceed = confirm(
-        `⚠ ${duplicates.length} invoice${duplicates.length > 1 ? "s" : ""} already exist: ${nums}\n\nThese will be skipped. Import the ${fresh.length} new invoice${fresh.length !== 1 ? "s" : ""}?`,
-      );
-      if (!proceed) return;
+      const confirmed = await showConfirm({
+        title: `${duplicates.length} duplicate invoice${duplicates.length > 1 ? "s" : ""} found`,
+        message: `${nums} already exist and will be skipped. Import the ${fresh.length} new invoice${fresh.length !== 1 ? "s" : ""}?`,
+        type: "warning",
+        confirmLabel: "Import new ones",
+      });
+      if (!confirmed) return;
     }
 
     if (fresh.length === 0) {
-      alert("All invoices in this PDF already exist — nothing imported.");
+      toast.info("All invoices in this PDF already exist — nothing imported.");
       setPreview(null);
       return;
     }
@@ -354,6 +368,9 @@ export default function Invoices() {
     ]);
     setPreview(null);
     setParseErr("");
+    toast.success(
+      `${fresh.length} invoice${fresh.length !== 1 ? "s" : ""} imported successfully.`,
+    );
   };
 
   const filtered = invoices
@@ -1128,14 +1145,19 @@ export default function Invoices() {
                   const nums = duplicates
                     .map((x) => `#${x.invoiceNumber}`)
                     .join(", ");
-                  const proceed = confirm(
-                    `⚠ ${duplicates.length} invoice(s) already exist: ${nums}\n\nSkip duplicates and generate ${fresh.length} new invoice(s)?`,
-                  );
+                  const proceed = await showConfirm({
+                    title: `${duplicates.length} duplicate invoice${duplicates.length !== 1 ? "s" : ""} found`,
+                    message: `${nums} already exist and will be skipped. Generate ${fresh.length} new invoice${fresh.length !== 1 ? "s" : ""}?`,
+                    type: "warning",
+                    confirmLabel: "Generate new ones",
+                  });
                   if (!proceed) return;
                 }
 
                 if (fresh.length === 0) {
-                  alert("All invoices already exist — nothing to generate.");
+                  toast.info(
+                    "All invoices already exist — nothing to generate.",
+                  );
                   return;
                 }
 
@@ -1182,6 +1204,9 @@ export default function Invoices() {
                   document.body.removeChild(a);
                   URL.revokeObjectURL(url);
                   setInvoices([...invoices, ...fresh]);
+                  toast.success(
+                    `${fresh.length} invoice${fresh.length !== 1 ? "s" : ""} generated — ZIP downloading.`,
+                  );
                   setShowGen(false);
                 } finally {
                   setGenerating(false);

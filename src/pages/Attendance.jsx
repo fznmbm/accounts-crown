@@ -3,6 +3,8 @@ import { useApp } from "../context/AppContext";
 import PageHeader from "../components/PageHeader";
 import Modal, { FormField, FormGrid, ModalFooter } from "../components/Modal";
 import EmptyState from "../components/EmptyState";
+import { toast } from "sonner";
+import { useConfirm } from "../context/ConfirmContext";
 import {
   uid,
   MONTHS,
@@ -137,6 +139,8 @@ export default function Attendance() {
   const [clipboard, setClipboard] = useState(null); // { status, driverId, driverName, ... }
   const [contextMenu, setContextMenu] = useState(null); // { x, y, date, route }
 
+  const showConfirm = useConfirm();
+
   const activeRoutes = routes.filter((r) => r.active && !r.suspended);
   const workingDays = getWorkingDays(month, year, activeRoutes);
   const drivers = staff.filter(
@@ -177,6 +181,27 @@ export default function Attendance() {
   const getHolidayLabel = (date) => {
     const key = dateKey(date);
     return holidays.find((h) => h.date === key)?.label || "";
+  };
+
+  const getHolidayType = (date, routeId) => {
+    const key = dateKey(date);
+    return (
+      holidays.find(
+        (h) => h.date === key && (h.allRoutes || h.routeIds?.includes(routeId)),
+      )?.type || "school_holiday"
+    );
+  };
+
+  const HOL_LABEL = {
+    bank_holiday: "BH",
+    school_holiday: "SH",
+    inset_day: "INSET",
+  };
+
+  const HOL_STYLE = {
+    bank_holiday: STATUS_STYLE.no_run_yellow,
+    school_holiday: STATUS_STYLE.no_run_yellow,
+    inset_day: STATUS_STYLE.no_run_orange,
   };
 
   // Cell display
@@ -363,7 +388,13 @@ export default function Attendance() {
 
   const delCell = async () => {
     if (!form) return;
-    if (confirm("Clear this attendance record?")) {
+    const confirmed = await showConfirm({
+      title: "Clear this attendance record?",
+      message: "This will remove the record for this route on this day.",
+      type: "danger",
+      confirmLabel: "Clear record",
+    });
+    if (confirmed) {
       const toDelete = attendance.find(
         (a) => a.date === form.date && a.routeId === form.routeId,
       );
@@ -564,13 +595,13 @@ export default function Attendance() {
     setAttendance(updated);
   };
 
-  const generateAllocations = () => {
+  const generateAllocations = async () => {
     const monthAtt = attendance.filter(
       (a) => a.month === month && a.year === year && a.status !== "no_run",
     );
 
     if (monthAtt.length === 0) {
-      alert(
+      toast.error(
         "No attendance records found for this month. Fill in the attendance register first.",
       );
       return;
@@ -578,8 +609,8 @@ export default function Attendance() {
 
     const withDriver = monthAtt.filter((a) => a.driverId && a.driverId !== "");
     if (withDriver.length === 0) {
-      alert(
-        `Found ${monthAtt.length} attendance records but none have a driver assigned.\n\nMake sure your routes have a Primary Driver set in the Routes page, then re-run "Fill month" to refresh the attendance data.`,
+      toast.error(
+        `Found ${monthAtt.length} attendance records but none have a driver assigned. Set a Primary Driver on your routes then re-run Fill month.`,
       );
       return;
     }
@@ -834,24 +865,29 @@ export default function Attendance() {
     }); // ← closes Object.entries(byRoute).forEach
 
     if (newAllocations.length === 0 && skipped.length > 0) {
-      alert(
+      toast.info(
         `All routes already have allocations for ${MONTHS[month]} ${year}.`,
       );
       return;
     }
 
-    const msg = [
-      `Generate ${newAllocations.length} allocation${newAllocations.length !== 1 ? "s" : ""} from attendance?`,
+    const skipMsg =
       skipped.length > 0
-        ? `\nSkipping ${skipped.length} routes with existing allocations: ${skipped.join(", ")}`
-        : "",
-      "\nYou can review and edit them in the Allocations page afterwards.",
-    ].join("");
+        ? `${skipped.length} route${skipped.length !== 1 ? "s" : ""} with existing allocations will be skipped.`
+        : "";
 
-    if (confirm(msg)) {
+    const confirmed = await showConfirm({
+      title: `Generate ${newAllocations.length} allocation${newAllocations.length !== 1 ? "s" : ""}?`,
+      message: [skipMsg, "Review and adjust rates in Allocations afterwards."]
+        .filter(Boolean)
+        .join(" "),
+      type: "info",
+      confirmLabel: "Generate",
+    });
+    if (confirmed) {
       setAllocations([...allocations, ...newAllocations]);
-      alert(
-        `✓ Created ${newAllocations.length} allocation${newAllocations.length !== 1 ? "s" : ""}. Go to Allocations to review and adjust rates if needed.`,
+      toast.success(
+        `${newAllocations.length} allocation${newAllocations.length !== 1 ? "s" : ""} generated. Go to Allocations to review rates.`,
       );
     }
   };
@@ -1068,7 +1104,7 @@ export default function Attendance() {
             </select>
             <button
               className="btn-secondary text-sm"
-              onClick={() => {
+              onClick={async () => {
                 const unrecorded = workingDays.filter((d) =>
                   activeRoutes.some(
                     (r) =>
@@ -1078,15 +1114,16 @@ export default function Attendance() {
                   ),
                 );
                 if (unrecorded.length === 0) {
-                  alert("All days already recorded.");
+                  toast.info("All days already recorded.");
                   return;
                 }
-                if (
-                  !confirm(
-                    `Mark all unrecorded days (${unrecorded.length} days × ${activeRoutes.length} routes) as ran with regular drivers?`,
-                  )
-                )
-                  return;
+                const confirmed = await showConfirm({
+                  title: `Fill ${unrecorded.length} unrecorded day${unrecorded.length !== 1 ? "s" : ""}?`,
+                  message: `Mark all unrecorded days across ${activeRoutes.length} routes as ran with regular drivers.`,
+                  type: "info",
+                  confirmLabel: "Fill month",
+                });
+                if (!confirmed) return;
 
                 // Collect ALL new records first then save once
                 const allNewRecords = [];
@@ -1148,21 +1185,25 @@ export default function Attendance() {
                   (a) => a.month === month && a.year === year,
                 );
                 if (monthRecords.length === 0) {
-                  alert("No records to clear this month.");
+                  toast.info("No records to clear this month.");
                   return;
                 }
-                if (
-                  !confirm(
-                    `Clear ALL ${monthRecords.length} attendance records for ${MONTHS[month]} ${year}? This cannot be undone.`,
-                  )
-                )
-                  return;
+                const confirmed = await showConfirm({
+                  title: `Clear all ${monthRecords.length} records?`,
+                  message: `Permanently deletes all attendance records for ${MONTHS[month]} ${year}. This cannot be undone.`,
+                  type: "warning",
+                  confirmLabel: "Yes, clear all",
+                });
+                if (!confirmed) return;
                 const ids = monthRecords.map((a) => a.id);
                 const remaining = attendance.filter(
                   (a) => !(a.month === month && a.year === year),
                 );
                 setAttendance(remaining);
                 await deleteAttendanceRecords(ids);
+                toast.success(
+                  `${monthRecords.length} attendance records cleared.`,
+                );
               }}
             >
               Clear month
@@ -1362,12 +1403,13 @@ export default function Attendance() {
                               {recorded > 0 && (
                                 <button
                                   onClick={async () => {
-                                    if (
-                                      !confirm(
-                                        `Clear all records for ${fmtDate(day)}?`,
-                                      )
-                                    )
-                                      return;
+                                    const confirmed = await showConfirm({
+                                      title: `Clear records for ${fmtDate(day)}?`,
+                                      message: `${recorded} record${recorded !== 1 ? "s" : ""} will be removed.`,
+                                      type: "warning",
+                                      confirmLabel: "Clear day",
+                                    });
+                                    if (!confirmed) return;
                                     const toDelete = attendance.filter(
                                       (a) =>
                                         a.date === dateKey(day) &&
@@ -1413,12 +1455,17 @@ export default function Attendance() {
                           className="border-b border-r border-gray-100 dark:border-gray-700/50 p-1"
                         >
                           {hol ? (
-                            <div
-                              title={getHolidayLabel(day)}
-                              className="w-full h-9 rounded-lg border text-xs font-semibold flex items-center justify-center bg-gray-100 dark:bg-gray-700/50 text-gray-300 dark:text-gray-600 border-gray-100 dark:border-gray-700 cursor-default select-none"
-                            >
-                              🏖
-                            </div>
+                            (() => {
+                              const holType = getHolidayType(day, route.id);
+                              return (
+                                <div
+                                  title={getHolidayLabel(day)}
+                                  className={`w-full h-9 rounded-lg border text-xs font-semibold flex items-center justify-center cursor-default select-none ${HOL_STYLE[holType] || STATUS_STYLE.no_run_yellow}`}
+                                >
+                                  {HOL_LABEL[holType] || "🏖"}
+                                </div>
+                              );
+                            })()
                           ) : isNonOperational(day, route.id) ? (
                             <div
                               title="Non-operational day for this route"
@@ -2479,7 +2526,7 @@ export default function Attendance() {
                   </button>
                   <button
                     className="w-full text-left px-4 py-2.5 text-sm text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 flex items-center gap-2"
-                    onClick={() => {
+                    onClick={async () => {
                       // Paste to all remaining days below in this route column
                       const currentDateKey = dateKey(contextMenu.date);
                       const remainingDays = workingDays.filter((d) => {
@@ -2490,15 +2537,18 @@ export default function Attendance() {
                         return true;
                       });
                       if (remainingDays.length === 0) {
-                        alert("No more days below in this month.");
+                        toast.info("No more days below in this month.");
                         setContextMenu(null);
                         return;
                       }
-                      if (
-                        !confirm(
-                          `Paste to ${remainingDays.length} remaining days in this route column?`,
-                        )
-                      ) {
+                      const confirmed = await showConfirm({
+                        title: `Paste to ${remainingDays.length} remaining days?`,
+                        message:
+                          "This will overwrite existing records in this route column.",
+                        type: "info",
+                        confirmLabel: "Paste all",
+                      });
+                      if (!confirmed) {
                         setContextMenu(null);
                         return;
                       }

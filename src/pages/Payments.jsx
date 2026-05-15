@@ -4,6 +4,9 @@ import PageHeader from "../components/PageHeader";
 import Modal, { FormField, FormGrid, ModalFooter } from "../components/Modal";
 import Badge from "../components/Badge";
 import EmptyState from "../components/EmptyState";
+import { toast } from "sonner";
+import { useConfirm } from "../context/ConfirmContext";
+
 import {
   uid,
   fmt,
@@ -47,6 +50,8 @@ export default function Payments() {
   const [yearF, setYearF] = useState(
     () => localStorage.getItem("pay_yearF") || String(currentYear()),
   );
+
+  const showConfirm = useConfirm();
 
   const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const open = () => {
@@ -102,20 +107,31 @@ export default function Payments() {
         label: `Payment to ${name} — ${fmt(record.amount)}`,
       },
     );
+    toast.success(editing ? "Payment updated." : "Payment logged.");
     close();
   };
 
-  const del = (id) => {
-    if (confirm("Delete this payment?")) {
-      const p = payments.find((x) => x.id === id);
+  const del = async (id) => {
+    const p = payments.find((x) => x.id === id);
+    const name = p?.isExternal
+      ? p.externalName
+      : staff.find((s) => s.id === p?.staffId)?.name || "Unknown";
+    const confirmed = await showConfirm({
+      title: "Delete this payment?",
+      message: `${fmt(p?.amount)} to ${name} — ${MONTHS_SHORT[p?.month]} ${p?.year}. This cannot be undone.`,
+      type: "danger",
+      confirmLabel: "Delete",
+    });
+    if (confirmed) {
       setPayments(
         payments.filter((x) => x.id !== id),
         {
           action: "delete",
           id,
-          label: `Payment to ${staff.find((s) => s.id === p?.staffId)?.name} — ${fmt(p?.amount)}`,
+          label: `Payment to ${name} — ${fmt(p?.amount)}`,
         },
       );
+      toast.success("Payment deleted.");
     }
   };
   const getName = (id) => staff.find((s) => s.id === id)?.name || "Unknown";

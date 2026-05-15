@@ -3,6 +3,8 @@ import { useApp } from "../context/AppContext";
 import PageHeader from "../components/PageHeader";
 import Modal, { FormField, FormGrid, ModalFooter } from "../components/Modal";
 import EmptyState from "../components/EmptyState";
+import { toast } from "sonner";
+import { useConfirm } from "../context/ConfirmContext";
 import {
   uid,
   MONTHS,
@@ -97,6 +99,8 @@ export default function HolidayCalendar() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
 
+  const showConfirm = useConfirm();
+
   const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
   const workingDays = getWorkingDays(month, year);
@@ -136,7 +140,7 @@ export default function HolidayCalendar() {
     setEditing(null);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.label) return;
     const allRoutes = form.allRoutes === true || form.allRoutes === "true";
 
@@ -146,7 +150,7 @@ export default function HolidayCalendar() {
       const from = new Date(form.dateFrom);
       const to = new Date(form.dateTo);
       if (to < from) {
-        alert("End date must be after start date");
+        toast.error("End date must be after start date.");
         return;
       }
       const newRecords = [];
@@ -175,15 +179,20 @@ export default function HolidayCalendar() {
         cur.setDate(cur.getDate() + 1);
       }
       if (newRecords.length === 0) {
-        alert("No new working days found in that range.");
+        toast.info("No new working days found in that range.");
         return;
       }
-      if (
-        confirm(
-          `Add ${newRecords.length} non-working day${newRecords.length !== 1 ? "s" : ""} (${form.dateFrom} to ${form.dateTo})?`,
-        )
-      ) {
+      const confirmedRange = await showConfirm({
+        title: `Add ${newRecords.length} non-working day${newRecords.length !== 1 ? "s" : ""}?`,
+        message: `${form.dateFrom} to ${form.dateTo}. Working days only will be added.`,
+        type: "info",
+        confirmLabel: "Add holidays",
+      });
+      if (confirmedRange) {
         setHolidays([...holidays, ...newRecords]);
+        toast.success(
+          `${newRecords.length} non-working day${newRecords.length !== 1 ? "s" : ""} added.`,
+        );
         close();
       }
       return;
@@ -211,9 +220,17 @@ export default function HolidayCalendar() {
     close();
   };
 
-  const del = (id) => {
-    if (confirm("Remove this holiday?"))
+  const del = async (id) => {
+    const confirmed = await showConfirm({
+      title: "Remove this holiday?",
+      message: "This non-working day will be removed from the calendar.",
+      type: "danger",
+      confirmLabel: "Remove",
+    });
+    if (confirmed) {
       setHolidays(holidays.filter((h) => h.id !== id));
+      toast.success("Holiday removed.");
+    }
   };
 
   // Import UK bank holidays for the year
@@ -226,7 +243,7 @@ export default function HolidayCalendar() {
       );
     });
     if (toImport.length === 0) {
-      alert(`All ${year} UK bank holidays already imported.`);
+      toast.info(`All ${year} UK bank holidays are already imported.`);
       return;
     }
     const newHols = toImport.map((bh) => {
@@ -244,7 +261,7 @@ export default function HolidayCalendar() {
       };
     });
     setHolidays([...holidays, ...newHols]);
-    alert(`Imported ${newHols.length} bank holidays for ${year}.`);
+    toast.success(`${newHols.length} bank holidays imported for ${year}.`);
   };
 
   // Toggle route in selection

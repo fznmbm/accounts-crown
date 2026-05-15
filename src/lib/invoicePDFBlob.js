@@ -90,7 +90,7 @@ function buildLines({ route, bands, notes, standardDays, daysWorked }) {
     Number(daysWorked) > 0 ? Number(daysWorked) : Number(standardDays);
   if (route.primaryPAId && Number(route.paDailyRate || 0) > 0 && totalQty > 0) {
     lines.push({
-      description: `Route ${rNum} ${route.name} — PA`,
+      description: "PA",
       qty: totalQty,
       unitPrice: Number(route.paDailyRate),
       amount: Math.round(totalQty * Number(route.paDailyRate) * 100) / 100,
@@ -135,17 +135,16 @@ export function generateInvoicePDFBlob({
   doc.setTextColor(0, 0, 0);
 
   // ── Date label ────────────────────────────────────────────────────────────
+  // ── Date + To / From address ──────────────────────────────────────────────
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
-  doc.text("Date", M, y + 2);
+  doc.text("Date:", M, y + 2);
+  doc.setFont("helvetica", "normal");
+  doc.text(invoiceDate, M + 16, y + 2);
   y += 8;
 
-  // ── To / From address ─────────────────────────────────────────────────────
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-
   [
-    `To: West Sussex County Council          ${invoiceDate}`,
+    "To: West Sussex County Council",
     "County Hall",
     "West Street",
     "Chichester",
@@ -190,6 +189,12 @@ export function generateInvoicePDFBlob({
   doc.setDrawColor(180, 180, 180);
   doc.setLineWidth(0.3);
   const rowH = 8;
+  const tableStartY = y;
+
+  // Vertical separator x positions
+  const SEP1 = M + 103; // Description | Qty
+  const SEP2 = M + 128; // Qty | Unit Price
+  const SEP3 = M + 159; // Unit Price | Amount
 
   // Header row
   doc.setFillColor(240, 240, 240);
@@ -207,14 +212,22 @@ export function generateInvoicePDFBlob({
   lines.forEach((l) => {
     doc.rect(M, y, CW, rowH, "D");
     const desc =
-      l.description.length > 78
-        ? l.description.substring(0, 76) + "…"
+      l.description.length > 55
+        ? l.description.substring(0, 53) + "…"
         : l.description;
     doc.text(desc, M + 2, y + 5.5);
     doc.text(String(l.qty), COL_QTY_X, y + 5.5, { align: "center" });
     doc.text(l.unitPrice.toFixed(2), COL_UNIT_X, y + 5.5, { align: "center" });
     rText(doc, fmtPDF(l.amount), COL_AMT_X - 2, y + 5.5);
     y += rowH;
+  });
+
+  // Vertical column separators spanning full table height
+  const tableEndY = y;
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.3);
+  [SEP1, SEP2, SEP3].forEach((x) => {
+    doc.line(x, tableStartY, x, tableEndY);
   });
 
   y += 5;
@@ -243,22 +256,38 @@ export function generateInvoicePDFBlob({
   y += 12;
 
   // ── Footer ────────────────────────────────────────────────────────────────
+  // ── Footer ────────────────────────────────────────────────────────────────
   doc.setLineWidth(0.3);
   doc.setDrawColor(200, 200, 200);
   doc.line(M, y, PW - M, y);
   y += 6;
 
-  doc.setFont("helvetica", "normal");
+  const footerRows = [
+    ["Payment Method", "—"],
+    ["VAT Registration No.", settings?.vatNumber || ""],
+    [
+      "Name",
+      settings?.accountName || settings?.companyName || "Crown Cars Ltd",
+    ],
+    ["Account No.", settings?.accountNo || ""],
+    ["Sort Code", settings?.sortCode || ""],
+  ];
+  const footerBoxH = footerRows.length * 7 + 6;
+  const footerBoxW = 112;
+
+  doc.setFillColor(248, 248, 248);
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.3);
+  doc.rect(M, y, footerBoxW, footerBoxH, "FD");
+
+  y += 5;
   doc.setFontSize(9);
-  [
-    "Payment Method  —",
-    `VAT Registration Number  —  ${settings?.vatNumber || ""}`,
-    `Name  ${settings?.accountName || settings?.companyName || "Crown Cars Ltd"}`,
-    `AC No  ${settings?.accountNo || ""}`,
-    `Sort Code  ${settings?.sortCode || ""}`,
-  ].forEach((line) => {
-    doc.text(line, M, y);
-    y += 5;
+  footerRows.forEach(([label, value]) => {
+    doc.setFont("helvetica", "bold");
+    doc.text(label, M + 3, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(String(value || "—"), M + 50, y);
+    y += 7;
   });
 
   return doc.output("blob");

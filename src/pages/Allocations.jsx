@@ -4,6 +4,8 @@ import PageHeader from "../components/PageHeader";
 import Modal, { FormField, FormGrid, ModalFooter } from "../components/Modal";
 import Badge from "../components/Badge";
 import EmptyState from "../components/EmptyState";
+import { toast } from "sonner";
+import { useConfirm } from "../context/ConfirmContext";
 import {
   uid,
   fmt,
@@ -56,6 +58,8 @@ export default function Allocations() {
     const s = localStorage.getItem("alloc_year");
     return s !== null ? parseInt(s) : currentYear();
   });
+
+  const showConfirm = useConfirm();
 
   const drivers = staff.filter(
     (s) => s.type === "driver" || s.type === "driver_pa",
@@ -344,12 +348,22 @@ export default function Allocations() {
         ? allocations.map((a) => (a.id === editing.id ? record : a))
         : [...allocations, record],
     );
+    toast.success(editing ? "Allocation updated." : "Allocation created.");
     close();
   };
 
-  const del = (id) => {
-    if (confirm("Delete this allocation?"))
+  const del = async (id) => {
+    const alloc = allocations.find((a) => a.id === id);
+    const confirmed = await showConfirm({
+      title: "Delete this allocation?",
+      message: `Route ${cleanNum(alloc?.routeNumber || "")} — ${MONTHS[alloc?.month]} ${alloc?.year}. This cannot be undone.`,
+      type: "danger",
+      confirmLabel: "Delete",
+    });
+    if (confirmed) {
       setAllocations(allocations.filter((a) => a.id !== id));
+      toast.success("Allocation deleted.");
+    }
   };
 
   // Filter by month/year

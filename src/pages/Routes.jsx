@@ -5,6 +5,8 @@ import PageHeader from "../components/PageHeader";
 import Modal, { FormField, FormGrid, ModalFooter } from "../components/Modal";
 import Badge from "../components/Badge";
 import EmptyState from "../components/EmptyState";
+import { toast } from "sonner";
+import { useConfirm } from "../context/ConfirmContext";
 import { uid, fmt, cleanNum } from "../lib/utils";
 import DocumentUploader from "../components/DocumentUploader";
 
@@ -45,6 +47,8 @@ export default function Routes() {
 
   const navigate = useNavigate();
 
+  const showConfirm = useConfirm();
+
   const drivers = staff.filter(
     (s) => s.type === "driver" || s.type === "driver_pa",
   );
@@ -76,37 +80,40 @@ export default function Routes() {
   };
   const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
-  const save = () => {
+  const save = async () => {
     if (!form.number || !form.name) return;
-    // Check for duplicate route number
     const duplicate = routes.find(
       (r) => r.number === form.number && r.id !== editing?.id,
     );
     if (duplicate) {
-      alert(
+      toast.error(
         `Route number ${form.number} already exists (${duplicate.name}). Please use a different number.`,
       );
       return;
     }
     if (!form.primaryDriverId) {
-      if (
-        !confirm(
-          "No primary driver assigned. Fill month and auto-generate allocations won't work correctly for this route. Save anyway?",
-        )
-      )
-        return;
+      const ok = await showConfirm({
+        title: "No primary driver assigned",
+        message:
+          "Fill month and auto-generate allocations won't work correctly for this route. Save anyway?",
+        type: "warning",
+        confirmLabel: "Save anyway",
+      });
+      if (!ok) return;
     }
     if (
       form.active &&
       !form.suspended &&
       (!form.dailyRate || parseFloat(form.dailyRate) === 0)
     ) {
-      if (
-        !confirm(
-          "WSCC daily rate is £0 on an active route. Invoices will generate as £0. Save anyway?",
-        )
-      )
-        return;
+      const ok = await showConfirm({
+        title: "WSCC rate is £0",
+        message:
+          "Invoices will generate as £0 for this active route. Save anyway?",
+        type: "warning",
+        confirmLabel: "Save anyway",
+      });
+      if (!ok) return;
     }
     const record = {
       id: editing?.id || uid(),
@@ -128,12 +135,22 @@ export default function Routes() {
         ? routes.map((r) => (r.id === editing.id ? record : r))
         : [...routes, record],
     );
+    toast.success(editing ? "Route updated." : "Route saved.");
     close();
   };
 
-  const del = (id) => {
-    if (confirm("Delete this route?"))
+  const del = async (id) => {
+    const route = routes.find((r) => r.id === id);
+    const confirmed = await showConfirm({
+      title: `Delete Route ${cleanNum(route?.number || "")}?`,
+      message: `${route?.name || ""} will be permanently removed.`,
+      type: "danger",
+      confirmLabel: "Delete",
+    });
+    if (confirmed) {
       setRoutes(routes.filter((r) => r.id !== id));
+      toast.success("Route deleted.");
+    }
   };
 
   const openPOHistory = (r) => {
@@ -846,8 +863,15 @@ export default function Routes() {
                           <td className="td">
                             <button
                               className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 text-xs"
-                              onClick={() => {
-                                if (confirm("Remove this PO history entry?"))
+                              onClick={async () => {
+                                const confirmed = await showConfirm({
+                                  title: "Remove this PO history entry?",
+                                  message:
+                                    "This PO record will be permanently removed.",
+                                  type: "danger",
+                                  confirmLabel: "Remove",
+                                });
+                                if (confirmed)
                                   setPoHistory(
                                     poHistory.filter((x) => x.id !== p.id),
                                   );
