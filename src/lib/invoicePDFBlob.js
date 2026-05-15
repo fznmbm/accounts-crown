@@ -230,44 +230,39 @@ export function generateInvoicePDFBlob({
     doc.line(x, tableStartY, x, tableEndY);
   });
 
-  const totBorderStartY = y;
-  y += 5;
-
-  // ── Totals ────────────────────────────────────────────────────────────────
-  const totX = SEP3 + 4;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-
-  doc.text("Net Total", totX, y);
-  rText(doc, fmtPDF(netTotal), COL_AMT_X - 2, y);
   y += 3;
 
-  // Thin grid line between Net Total and VAT
+  // ── Totals — proper table rows matching the grid above ───────────────────
   doc.setDrawColor(180, 180, 180);
   doc.setLineWidth(0.3);
-  doc.line(SEP3, y, PW - M, y);
-  y += 4;
+  doc.setFontSize(9);
+  const rowHT = 8;
+  const totalsLeft = SEP2;
+  const totalsCW = PW - M - totalsLeft;
 
+  // Net Total row
   doc.setFont("helvetica", "normal");
-  doc.text("VAT", totX, y);
-  rText(doc, fmtPDF(vat), COL_AMT_X - 2, y);
-  y += 5;
+  doc.rect(totalsLeft, y, totalsCW, rowHT, "D");
+  doc.line(SEP3, y, SEP3, y + rowHT);
+  doc.text("Net Total", totalsLeft + 3, y + 5.5);
+  rText(doc, fmtPDF(netTotal), COL_AMT_X - 2, y + 5.5);
+  y += rowHT;
 
-  // Thick separator before Total
-  doc.setLineWidth(0.5);
-  doc.setDrawColor(0, 0, 0);
-  doc.line(SEP3, y, PW - M, y);
-  y += 5;
+  // VAT row
+  doc.rect(totalsLeft, y, totalsCW, rowHT, "D");
+  doc.line(SEP3, y, SEP3, y + rowHT);
+  doc.text("VAT", totalsLeft + 3, y + 5.5);
+  rText(doc, fmtPDF(vat), COL_AMT_X - 2, y + 5.5);
+  y += rowHT;
 
+  // Total row — shaded to match header
+  doc.setFillColor(240, 240, 240);
+  doc.rect(totalsLeft, y, totalsCW, rowHT, "FD");
+  doc.line(SEP3, y, SEP3, y + rowHT);
   doc.setFont("helvetica", "bold");
-  doc.text("Total", totX, y);
-  rText(doc, fmtPDF(total), COL_AMT_X - 2, y);
-  y += 8;
-
-  // Right border only — removes the stray left SEP3 border
-  doc.setDrawColor(180, 180, 180);
-  doc.setLineWidth(0.3);
-  doc.line(PW - M, totBorderStartY, PW - M, y);
+  doc.text("Total", totalsLeft + 3, y + 5.5);
+  rText(doc, fmtPDF(total), COL_AMT_X - 2, y + 5.5);
+  y += rowHT + 8;
 
   y += 4;
 
