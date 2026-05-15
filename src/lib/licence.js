@@ -5,6 +5,11 @@ import { createClient } from "@supabase/supabase-js";
 const platformClient = createClient(
   import.meta.env.VITE_PLATFORM_SUPABASE_URL,
   import.meta.env.VITE_PLATFORM_ANON_KEY,
+  {
+    auth: {
+      storageKey: "sb-platform-auth-token",
+    },
+  },
 );
 
 export async function validateLicence(licenceKey) {

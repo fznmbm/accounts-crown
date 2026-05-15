@@ -5,12 +5,24 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { LicenceProvider } from "./context/LicenceContext";
 import "./index.css";
 
+// ReactDOM.createRoot(document.getElementById("root")).render(
+//   <React.StrictMode>
+//     <ThemeProvider>
+//       <LicenceProvider>
+//         <App />
+//       </LicenceProvider>
+//     </ThemeProvider>
+//   </React.StrictMode>,
+// );
+
+const app = (
+  <ThemeProvider>
+    <LicenceProvider>
+      <App />
+    </LicenceProvider>
+  </ThemeProvider>
+);
+
 ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <ThemeProvider>
-      <LicenceProvider>
-        <App />
-      </LicenceProvider>
-    </ThemeProvider>
-  </React.StrictMode>,
+  import.meta.env.DEV ? <React.StrictMode>{app}</React.StrictMode> : app,
 );

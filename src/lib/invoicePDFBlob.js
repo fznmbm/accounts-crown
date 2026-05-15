@@ -240,15 +240,23 @@ export function generateInvoicePDFBlob({
 
   doc.text("Net Total", totX, y);
   rText(doc, fmtPDF(netTotal), COL_AMT_X - 2, y);
-  y += 6;
-
-  doc.text("VAT", totX, y);
-  rText(doc, fmtPDF(vat), COL_AMT_X - 2, y);
   y += 3;
 
+  // Thin grid line between Net Total and VAT
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.3);
+  doc.line(SEP3, y, PW - M, y);
+  y += 4;
+
+  doc.setFont("helvetica", "normal");
+  doc.text("VAT", totX, y);
+  rText(doc, fmtPDF(vat), COL_AMT_X - 2, y);
+  y += 5;
+
+  // Thick separator before Total
   doc.setLineWidth(0.5);
   doc.setDrawColor(0, 0, 0);
-  doc.line(totX, y, PW - M, y);
+  doc.line(SEP3, y, PW - M, y);
   y += 5;
 
   doc.setFont("helvetica", "bold");
@@ -256,10 +264,9 @@ export function generateInvoicePDFBlob({
   rText(doc, fmtPDF(total), COL_AMT_X - 2, y);
   y += 8;
 
-  // Border framing the totals section
+  // Right border only — removes the stray left SEP3 border
   doc.setDrawColor(180, 180, 180);
   doc.setLineWidth(0.3);
-  doc.line(SEP3, totBorderStartY, SEP3, y);
   doc.line(PW - M, totBorderStartY, PW - M, y);
 
   y += 4;
