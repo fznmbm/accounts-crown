@@ -14,8 +14,8 @@ const PW = 210; // page width
 const CW = PW - M * 2; // content width 170mm
 
 // Column x positions
-const COL_QTY_X = M + 115;
-const COL_UNIT_X = M + 143;
+const COL_QTY_X = M + 95;
+const COL_UNIT_X = M + 120;
 const COL_AMT_X = PW - M;
 
 // Right-aligned text helper
@@ -114,9 +114,9 @@ export function generateInvoicePDFBlob({
   standardDays = 0,
 }) {
   const vatRate = Number(settings?.vatRate || 20);
-  const address = (
-    settings?.address || "1, John Brackpool Close, Crawley, RH10 8FA"
-  ).replace(/\n/g, ", ");
+  const addressParts = (
+    settings?.address || "1 John Brackpool Close\nCrawley\nRH10 8FA"
+  ).split(/\n|,\s*/);
 
   const lines = buildLines({ route, bands, notes, standardDays, daysWorked });
   const netTotal =
@@ -158,7 +158,7 @@ export function generateInvoicePDFBlob({
 
   [
     `From: ${settings?.companyName || "Crown Cars Ltd"}`,
-    address,
+    ...addressParts,
     settings?.phone ? `Phone: ${settings.phone}` : null,
     settings?.email ? `Email: ${settings.email}` : null,
   ]
@@ -192,9 +192,9 @@ export function generateInvoicePDFBlob({
   const tableStartY = y;
 
   // Vertical separator x positions
-  const SEP1 = M + 103; // Description | Qty
-  const SEP2 = M + 128; // Qty | Unit Price
-  const SEP3 = M + 159; // Unit Price | Amount
+  const SEP1 = M + 85; // Description | Qty
+  const SEP2 = M + 107; // Qty | Unit Price
+  const SEP3 = M + 135; // Unit Price | Amount (55mm column)
 
   // Header row
   doc.setFillColor(240, 240, 240);
@@ -230,10 +230,11 @@ export function generateInvoicePDFBlob({
     doc.line(x, tableStartY, x, tableEndY);
   });
 
+  const totBorderStartY = y;
   y += 5;
 
   // ── Totals ────────────────────────────────────────────────────────────────
-  const totX = PW - M - 70;
+  const totX = SEP3 + 4;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
 
@@ -253,7 +254,15 @@ export function generateInvoicePDFBlob({
   doc.setFont("helvetica", "bold");
   doc.text("Total", totX, y);
   rText(doc, fmtPDF(total), COL_AMT_X - 2, y);
-  y += 12;
+  y += 8;
+
+  // Border framing the totals section
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.3);
+  doc.line(SEP3, totBorderStartY, SEP3, y);
+  doc.line(PW - M, totBorderStartY, PW - M, y);
+
+  y += 4;
 
   // ── Footer ────────────────────────────────────────────────────────────────
   // ── Footer ────────────────────────────────────────────────────────────────

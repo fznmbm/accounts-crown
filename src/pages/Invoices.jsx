@@ -363,6 +363,11 @@ export default function Invoices() {
         status: "unpaid",
         paidAmount: 0,
         fileName: r._file || r.fileName,
+        isRevised: false,
+        revisedBy: null,
+        revisionNote: "",
+        originalInvoiceId: null,
+        remittanceId: null,
         createdAt: Date.now(),
       })),
     ]);
@@ -1128,6 +1133,11 @@ export default function Invoices() {
                     paidAmount: 0,
                     fileName: "",
                     notes: genNotes[r.id] || "",
+                    isRevised: false,
+                    revisedBy: null,
+                    revisionNote: "",
+                    originalInvoiceId: null,
+                    remittanceId: null,
                     createdAt: Date.now(),
                   });
                 });
