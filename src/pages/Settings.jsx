@@ -355,8 +355,14 @@ export default function Settings() {
     setTimeout(() => setSaved(false), 2500);
   };
 
-  const reset = () => {
-    if (confirm("Reset all settings to defaults?")) {
+  const reset = async () => {
+    const confirmed = await showConfirm({
+      title: "Reset all settings to defaults?",
+      message: "Your current settings will be overwritten.",
+      type: "warning",
+      confirmLabel: "Reset",
+    });
+    if (confirmed) {
       setForm({ ...DEFAULT_SETTINGS });
       setSettings({ ...DEFAULT_SETTINGS });
     }
@@ -1007,7 +1013,6 @@ export default function Settings() {
           </div>
         </div>
       </div>
-</div>
 
       {/* Billing Recipient Modal */}
       {showBrModal && (
@@ -1127,5 +1132,6 @@ export default function Settings() {
           </ModalFooter>
         </Modal>
       )}
+    </div>
   );
 }
