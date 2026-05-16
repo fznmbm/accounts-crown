@@ -675,6 +675,34 @@ const applicationToDb = (a, uid) => ({
   created_at: a.createdAt,
 });
 
+const billingRecipientFromDb = (r) => ({
+  id: r.id,
+  name: r.name,
+  address: r.address || "",
+  email: r.email || "",
+  phone: r.phone || "",
+  supplierRef: r.supplier_ref || "",
+  isDefault: r.is_default || false,
+  active: r.active ?? true,
+  lastInvoiceNumber: r.last_invoice_number || 0,
+  notes: r.notes || "",
+  createdAt: r.created_at,
+});
+const billingRecipientToDb = (r, uid) => ({
+  id: r.id,
+  owner_user_id: uid,
+  name: r.name,
+  address: r.address || "",
+  email: r.email || "",
+  phone: r.phone || "",
+  supplier_ref: r.supplierRef || "",
+  is_default: r.isDefault || false,
+  active: r.active ?? true,
+  last_invoice_number: r.lastInvoiceNumber || 0,
+  notes: r.notes || "",
+  created_at: r.createdAt,
+});
+
 // ── sync helper: replace all rows for user in a table ────────────────────────
 async function syncTable(table, data, toDb, userId) {
   const base = import.meta.env.VITE_SUPABASE_URL;
@@ -777,6 +805,7 @@ export function AppProvider({ children }) {
   const [portalTokens, setRawPortalTokens] = useState([]);
   const [submissions, setRawSubmissions] = useState([]);
   const [applications, setRawApplications] = useState([]);
+  const [billingRecipients, setRawBillingRecipients] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // ── Load all data on mount ─────────────────────────────────────────────────
@@ -857,7 +886,7 @@ export function AppProvider({ children }) {
         setRawHolidays((hol.data || []).map(holidayFromDb));
         if (hol.error) console.error("school_holidays:", hol.error);
 
-        const [lic, trn, tok, sub, app] = [
+        const [lic, trn, tok, sub, app, br] = [
           await supabase.from("staff_licences").select("*").eq("user_id", uid),
           await supabase.from("staff_training").select("*").eq("user_id", uid),
           await supabase
@@ -872,6 +901,10 @@ export function AppProvider({ children }) {
             .from("staff_applications")
             .select("*")
             .eq("target_user_id", uid),
+          await supabase
+            .from("billing_recipients")
+            .select("*")
+            .eq("owner_user_id", uid),
         ];
         setRawStaffLicences(
           (lic.data || [])
@@ -891,6 +924,12 @@ export function AppProvider({ children }) {
         if (sub.error) console.error("staff_invoice_submissions:", sub.error);
         setRawApplications((app.data || []).map(applicationFromDb));
         if (app.error) console.error("staff_applications:", app.error);
+        setRawBillingRecipients(
+          (br.data || [])
+            .map(billingRecipientFromDb)
+            .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)),
+        );
+        if (br.error) console.error("billing_recipients:", br.error);
 
         if (r.error) console.error("routes:", r.error);
         if (inv.error) console.error("invoices:", inv.error);
@@ -1215,6 +1254,43 @@ export function AppProvider({ children }) {
     await syncSettings(data, effectiveUserId);
   };
 
+  const setBillingRecipients = async (data) => {
+    setRawBillingRecipients(data);
+    const { base, apikey, token } = getAuthHeaders();
+    if (!token) return;
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      apikey,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal,resolution=merge-duplicates",
+    };
+    if (data.length > 0) {
+      const res = await fetch(`${base}/rest/v1/billing_recipients`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(
+          data.map((r) => billingRecipientToDb(r, effectiveUserId)),
+        ),
+      });
+      if (!res.ok) {
+        console.error("billing_recipients upsert failed:", await res.text());
+        return;
+      }
+    }
+    const currentIds = data.map((r) => r.id);
+    if (currentIds.length > 0) {
+      await fetch(
+        `${base}/rest/v1/billing_recipients?owner_user_id=eq.${effectiveUserId}&id=not.in.(${currentIds.join(",")})`,
+        { method: "DELETE", headers },
+      );
+    } else {
+      await fetch(
+        `${base}/rest/v1/billing_recipients?owner_user_id=eq.${effectiveUserId}`,
+        { method: "DELETE", headers },
+      );
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-gray-950">
@@ -1263,6 +1339,8 @@ export function AppProvider({ children }) {
         setSubmissions,
         applications,
         setApplications,
+        billingRecipients,
+        setBillingRecipients,
       }}
     >
       {children}

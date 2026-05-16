@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import { useApp, DEFAULT_SETTINGS } from "../context/AppContext";
 import { CONFIG } from "../config";
 import PageHeader from "../components/PageHeader";
-import { FormField, FormGrid } from "../components/Modal";
-//import { uid } from "../lib/utils";
+import Modal, { FormField, FormGrid, ModalFooter } from "../components/Modal";
+import { uid } from "../lib/utils";
 import DocumentUploader from "../components/DocumentUploader";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import { toast } from "sonner";
+import { useConfirm } from "../context/ConfirmContext";
 
 // function MigrateButton() {
 //   const {
@@ -129,6 +131,8 @@ export default function Settings() {
     attendance,
     allocations,
     holidays,
+    billingRecipients,
+    setBillingRecipients,
   } = useApp();
   const [form, setForm] = useState({ ...DEFAULT_SETTINGS, ...settings });
   const [saved, setSaved] = useState(false);
@@ -208,12 +212,14 @@ export default function Settings() {
   };
 
   const removeMember = async (email) => {
-    if (
-      !confirm(
-        `Remove ${email} from your team? This will also delete their login account.`,
-      )
-    )
-      return;
+    const confirmed = await showConfirm({
+      title: `Remove ${email}?`,
+      message:
+        "This will also delete their login account. They will no longer have access.",
+      type: "danger",
+      confirmLabel: "Remove",
+    });
+    if (!confirmed) return;
     try {
       // Call Edge Function FIRST — it verifies ownership via DB row, deletes auth user, then deletes DB row
       const {
@@ -235,13 +241,111 @@ export default function Settings() {
       if (!res.ok) throw new Error(result.error);
       // Edge Function handled DB deletion — just update local state
       setMembers((p) => p.filter((m) => m.member_email !== email));
-      alert(`✓ ${email} removed and login deleted.`);
+      toast.success(`${email} removed and login deleted.`);
     } catch (err) {
-      alert(`Failed: ${err.message}`);
+      toast.error(`Failed: ${err.message}`);
     }
   };
   const [newTrainingName, setNewTrainingName] = useState("");
   const [newTrainingYears, setNewTrainingYears] = useState(3);
+
+  const showConfirm = useConfirm();
+
+  // ── Billing recipients ────────────────────────────────────────────────────
+  const [showBrModal, setShowBrModal] = useState(false);
+  const [editingBr, setEditingBr] = useState(null);
+  const [brForm, setBrForm] = useState({
+    name: "",
+    address: "",
+    email: "",
+    phone: "",
+    supplierRef: "",
+    isDefault: false,
+    active: true,
+    lastInvoiceNumber: 0,
+    notes: "",
+  });
+
+  const bf = (k) => (e) => setBrForm((p) => ({ ...p, [k]: e.target.value }));
+
+  const openAddBr = () => {
+    setBrForm({
+      name: "",
+      address: "",
+      email: "",
+      phone: "",
+      supplierRef: "",
+      isDefault: billingRecipients.length === 0,
+      active: true,
+      lastInvoiceNumber: 0,
+      notes: "",
+    });
+    setEditingBr(null);
+    setShowBrModal(true);
+  };
+
+  const openEditBr = (r) => {
+    setBrForm({ ...r });
+    setEditingBr(r);
+    setShowBrModal(true);
+  };
+
+  const closeBrModal = () => {
+    setShowBrModal(false);
+    setEditingBr(null);
+  };
+
+  const saveBr = async () => {
+    if (!brForm.name?.trim()) return;
+    const record = {
+      id: editingBr?.id || uid(),
+      name: brForm.name.trim(),
+      address: brForm.address || "",
+      email: brForm.email || "",
+      phone: brForm.phone || "",
+      supplierRef: brForm.supplierRef || "",
+      isDefault: brForm.isDefault || false,
+      active: brForm.active ?? true,
+      lastInvoiceNumber: Number(brForm.lastInvoiceNumber) || 0,
+      notes: brForm.notes || "",
+      createdAt: editingBr?.createdAt || Date.now(),
+    };
+    let updated = editingBr
+      ? billingRecipients.map((r) => (r.id === editingBr.id ? record : r))
+      : [...billingRecipients, record];
+    // Ensure only one default
+    if (record.isDefault)
+      updated = updated.map((r) =>
+        r.id === record.id ? r : { ...r, isDefault: false },
+      );
+    await setBillingRecipients(updated);
+    toast.success(editingBr ? "Recipient updated." : "Recipient added.");
+    closeBrModal();
+  };
+
+  const deleteBr = async (id) => {
+    const r = billingRecipients.find((x) => x.id === id);
+    const confirmed = await showConfirm({
+      title: `Delete ${r?.name}?`,
+      message:
+        "Existing invoices and routes will keep their data — only the recipient record is removed.",
+      type: "danger",
+      confirmLabel: "Delete",
+    });
+    if (confirmed) {
+      await setBillingRecipients(billingRecipients.filter((x) => x.id !== id));
+      toast.success("Recipient deleted.");
+    }
+  };
+
+  const setAsDefault = async (id) => {
+    const updated = billingRecipients.map((r) => ({
+      ...r,
+      isDefault: r.id === id,
+    }));
+    await setBillingRecipients(updated);
+    toast.success("Default billing recipient updated.");
+  };
 
   const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
@@ -461,6 +565,108 @@ export default function Settings() {
                 />
               </FormField>
             </FormGrid>
+          </div>
+
+          {/* Billing Recipients */}
+          <div className="card p-5 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-700">
+              <div>
+                <h2 className="section-title">Billing recipients</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Who you invoice — each recipient has their own supplier
+                  reference and invoice number sequence.
+                </p>
+              </div>
+              <button className="btn-primary text-sm" onClick={openAddBr}>
+                + Add recipient
+              </button>
+            </div>
+
+            {billingRecipients.length === 0 ? (
+              <div className="text-center py-6 space-y-2">
+                <p className="text-sm text-gray-400 dark:text-gray-500">
+                  No billing recipients yet.
+                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  Add your main client — e.g. West Sussex County Council
+                </p>
+                <button
+                  className="btn-primary text-sm mt-2"
+                  onClick={openAddBr}
+                >
+                  Add first recipient
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {billingRecipients.map((r) => (
+                  <div
+                    key={r.id}
+                    className={`p-4 rounded-xl border ${
+                      r.isDefault
+                        ? "bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800"
+                        : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            {r.name}
+                          </p>
+                          {r.isDefault && (
+                            <span className="chip-green text-xs">Default</span>
+                          )}
+                          {!r.active && (
+                            <span className="chip-red text-xs">Inactive</span>
+                          )}
+                        </div>
+                        {r.address && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 whitespace-pre-line">
+                            {r.address}
+                          </p>
+                        )}
+                        <div className="flex gap-4 mt-1.5 flex-wrap">
+                          {r.supplierRef && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              Supplier ref:{" "}
+                              <span className="font-mono font-medium">
+                                {r.supplierRef}
+                              </span>
+                            </p>
+                          )}
+                          <p className="text-xs text-gray-400 dark:text-gray-500">
+                            Invoice sequence: #{r.lastInvoiceNumber || 0}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0">
+                        {!r.isDefault && (
+                          <button
+                            className="btn-ghost text-xs"
+                            onClick={() => setAsDefault(r.id)}
+                          >
+                            Set default
+                          </button>
+                        )}
+                        <button
+                          className="btn-ghost text-xs"
+                          onClick={() => openEditBr(r)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="btn-ghost text-xs text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          onClick={() => deleteBr(r.id)}
+                        >
+                          Del
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Licensing authorities */}
@@ -801,6 +1007,125 @@ export default function Settings() {
           </div>
         </div>
       </div>
-    </div>
+</div>
+
+      {/* Billing Recipient Modal */}
+      {showBrModal && (
+        <Modal
+          title={editingBr ? "Edit billing recipient" : "Add billing recipient"}
+          onClose={closeBrModal}
+          size="md"
+        >
+          <div className="space-y-4">
+            <FormField label="Recipient name *">
+              <input
+                className="input"
+                value={brForm.name}
+                onChange={bf("name")}
+                placeholder="e.g. West Sussex County Council"
+                autoFocus
+              />
+            </FormField>
+            <FormField label="Address">
+              <textarea
+                className="input"
+                rows={3}
+                value={brForm.address}
+                onChange={bf("address")}
+                placeholder={"County Hall\nWest Street\nChichester\nPO19 1RQ"}
+              />
+            </FormField>
+            <FormGrid cols={2}>
+              <FormField label="Email">
+                <input
+                  className="input"
+                  type="email"
+                  value={brForm.email}
+                  onChange={bf("email")}
+                  placeholder="accounts@example.gov.uk"
+                />
+              </FormField>
+              <FormField label="Phone">
+                <input
+                  className="input"
+                  value={brForm.phone}
+                  onChange={bf("phone")}
+                />
+              </FormField>
+            </FormGrid>
+            <FormField
+              label="Supplier reference"
+              hint="The reference number they assign to you"
+            >
+              <input
+                className="input font-mono w-48"
+                value={brForm.supplierRef}
+                onChange={bf("supplierRef")}
+                placeholder="e.g. 103820"
+              />
+            </FormField>
+            <FormField
+              label="Starting invoice number"
+              hint="Next invoice generated will be this + 1"
+            >
+              <input
+                className="input font-mono w-40"
+                type="number"
+                min="0"
+                value={brForm.lastInvoiceNumber}
+                onChange={bf("lastInvoiceNumber")}
+              />
+            </FormField>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={brForm.isDefault || false}
+                  onChange={(e) =>
+                    setBrForm((p) => ({ ...p, isDefault: e.target.checked }))
+                  }
+                  className="w-4 h-4 rounded"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Set as default billing recipient
+                </span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={brForm.active ?? true}
+                  onChange={(e) =>
+                    setBrForm((p) => ({ ...p, active: e.target.checked }))
+                  }
+                  className="w-4 h-4 rounded"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Active
+                </span>
+              </label>
+            </div>
+            <FormField label="Notes">
+              <input
+                className="input"
+                value={brForm.notes}
+                onChange={bf("notes")}
+                placeholder="Any notes about this client…"
+              />
+            </FormField>
+          </div>
+          <ModalFooter>
+            <button className="btn-secondary" onClick={closeBrModal}>
+              Cancel
+            </button>
+            <button
+              className="btn-primary"
+              onClick={saveBr}
+              disabled={!brForm.name?.trim()}
+            >
+              {editingBr ? "Save changes" : "Add recipient"}
+            </button>
+          </ModalFooter>
+        </Modal>
+      )}
   );
 }

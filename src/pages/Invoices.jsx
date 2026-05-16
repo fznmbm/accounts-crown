@@ -42,7 +42,15 @@ const EMPTY = {
 };
 
 export default function Invoices() {
-  const { invoices, setInvoices, routes, settings, attendance } = useApp();
+  const {
+    invoices,
+    setInvoices,
+    routes,
+    settings,
+    attendance,
+    billingRecipients,
+    setBillingRecipients,
+  } = useApp();
   const [search, setSearch] = useState("");
   const [statusF, setStatusF] = useState("all");
   const [monthF, setMonthF] = useState("all");
@@ -70,13 +78,21 @@ export default function Invoices() {
   const [genDays, setGenDays] = useState({});
   const [genBandDays, setGenBandDays] = useState({});
   const [genNotes, setGenNotes] = useState({});
+  const [genRecipientId, setGenRecipientId] = useState("");
   const [generating, setGenerating] = useState(false);
 
   const showConfirm = useConfirm();
 
-  const nextInvoiceNum = () => {
-    const nums = invoices.map((x) => parseInt(x.invoiceNumber)).filter(Boolean);
-    return nums.length ? String(Math.max(...nums) + 1) : "";
+  const nextInvoiceNum = (recipientId) => {
+    const recipient = billingRecipients.find((r) => r.id === recipientId);
+    const fromRecipient = recipient?.lastInvoiceNumber || 0;
+    const clientNums = invoices
+      .filter((x) => (recipientId ? x.clientId === recipientId : true))
+      .map((x) => parseInt(x.invoiceNumber))
+      .filter(Boolean);
+    const fromInvoices = clientNums.length ? Math.max(...clientNums) : 0;
+    const max = Math.max(fromRecipient, fromInvoices);
+    return max > 0 ? String(max + 1) : "";
   };
 
   const getAttendanceDays = (routeId, month, year) =>
@@ -409,7 +425,13 @@ export default function Invoices() {
             <button
               className="btn-secondary"
               onClick={() => {
-                setGenStartNum(nextInvoiceNum());
+                const defaultR =
+                  billingRecipients.find((r) => r.isDefault && r.active) ||
+                  billingRecipients.find((r) => r.active) ||
+                  null;
+                const rid = defaultR?.id || "";
+                setGenRecipientId(rid);
+                setGenStartNum(nextInvoiceNum(rid));
                 const { days, bandDays } = buildPreFill(genMonth, genYear);
                 setGenDays(days);
                 setGenBandDays(bandDays);
@@ -760,6 +782,28 @@ export default function Invoices() {
           size="lg"
         >
           <div className="space-y-4">
+            {billingRecipients.length > 0 && (
+              <FormField label="Bill to">
+                <select
+                  className="input"
+                  value={genRecipientId}
+                  onChange={(e) => {
+                    setGenRecipientId(e.target.value);
+                    setGenStartNum(nextInvoiceNum(e.target.value));
+                  }}
+                >
+                  <option value="">No recipient selected</option>
+                  {billingRecipients
+                    .filter((r) => r.active)
+                    .map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                        {r.isDefault ? " (default)" : ""}
+                      </option>
+                    ))}
+                </select>
+              </FormField>
+            )}
             <FormGrid cols={3}>
               <FormField label="Month">
                 <select
@@ -1138,6 +1182,7 @@ export default function Invoices() {
                     revisionNote: "",
                     originalInvoiceId: null,
                     remittanceId: null,
+                    clientId: genRecipientId || null,
                     createdAt: Date.now(),
                   });
                 });
@@ -1198,6 +1243,10 @@ export default function Invoices() {
                           routes.find((r) => r.number === inv.routeNumber)?.id
                         ] || 0,
                       ),
+                      recipient:
+                        billingRecipients.find(
+                          (r) => r.id === genRecipientId,
+                        ) || null,
                     });
                     folder.file(
                       `INV-${inv.invoiceNumber}-R${cleanNum(inv.routeNumber)}-${genYear}-${String(genMonth + 1).padStart(2, "0")}.pdf`,
@@ -1214,6 +1263,27 @@ export default function Invoices() {
                   document.body.removeChild(a);
                   URL.revokeObjectURL(url);
                   setInvoices([...invoices, ...fresh]);
+                  // Update recipient's lastInvoiceNumber
+                  if (genRecipientId && fresh.length > 0) {
+                    const maxNum = Math.max(
+                      ...fresh.map((inv) => parseInt(inv.invoiceNumber) || 0),
+                    );
+                    if (maxNum > 0) {
+                      await setBillingRecipients(
+                        billingRecipients.map((r) =>
+                          r.id === genRecipientId
+                            ? {
+                                ...r,
+                                lastInvoiceNumber: Math.max(
+                                  r.lastInvoiceNumber || 0,
+                                  maxNum,
+                                ),
+                              }
+                            : r,
+                        ),
+                      );
+                    }
+                  }
                   toast.success(
                     `${fresh.length} invoice${fresh.length !== 1 ? "s" : ""} generated — ZIP downloading.`,
                   );

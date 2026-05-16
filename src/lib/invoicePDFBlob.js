@@ -112,6 +112,7 @@ export function generateInvoicePDFBlob({
   bands = {},
   notes = "",
   standardDays = 0,
+  recipient = null,
 }) {
   const vatRate = Number(settings?.vatRate || 20);
   const addressParts = (
@@ -143,12 +144,19 @@ export function generateInvoicePDFBlob({
   doc.text(invoiceDate, M + 16, y + 2);
   y += 8;
 
+  const recipientName = recipient?.name || "West Sussex County Council";
+  const recipientAddressLines = (
+    recipient?.address || "County Hall\nWest Street\nChichester\nPO19 1RQ"
+  )
+    .split("\n")
+    .filter(Boolean);
+
   doc.setFont("helvetica", "bold");
   doc.text("To: ", M, y);
   doc.setFont("helvetica", "normal");
-  doc.text("West Sussex County Council", M + doc.getTextWidth("To: "), y);
+  doc.text(recipientName, M + doc.getTextWidth("To: "), y);
   y += 5;
-  ["County Hall", "West Street", "Chichester", "PO19 1RQ"].forEach((line) => {
+  recipientAddressLines.forEach((line) => {
     doc.text(line, M, y);
     y += 5;
   });
@@ -180,7 +188,10 @@ export function generateInvoicePDFBlob({
   // ── Meta block ────────────────────────────────────────────────────────────
   [
     ["Invoice Number", String(invoiceNumber)],
-    ["Vendor Number", settings?.supplierNumber || "103820"],
+    [
+      "Vendor Number",
+      recipient?.supplierRef || settings?.supplierNumber || "103820",
+    ],
     ["Purchase Order Number", route.poNumber || "—"],
   ].forEach(([label, value]) => {
     doc.setFont("helvetica", "bold");
