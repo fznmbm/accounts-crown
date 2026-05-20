@@ -266,119 +266,121 @@ export default function Routes() {
           />
         ) : (
           <div className="card overflow-hidden">
-            <table className="min-w-full">
-              <thead>
-                <tr className="thead-row">
-                  <th className="th">Route</th>
-                  <th className="th">PO Number</th>
-                  <th className="th">School</th>
-                  <th className="th">Driver</th>
-                  <th className="th">PA</th>
-                  <th className="th-r">Contract rate</th>
-                  <th className="th-r">Driver rate</th>
-                  <th className="th-r">PA rate</th>
-                  <th className="th-r">PA pay</th>
-                  <th className="th-r">Margin/day</th>
-                  <th className="th">Rate bands</th>
-                  <th className="th">Status</th>
-                  <th className="th"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {filtered.map((r) => (
-                  <tr key={r.id} className="tr">
-                    <td className="td">
-                      <p className="font-semibold text-gray-900 dark:text-gray-100">
-                        Route {cleanNum(r.number)}
-                      </p>
-                      <p className="muted">{r.name}</p>
-                    </td>
-                    <td className="td font-mono text-xs text-gray-500 dark:text-gray-400">
-                      {r.poNumber || "—"}
-                    </td>
-                    <td className="td text-gray-600 dark:text-gray-400">
-                      {r.school || "—"}
-                    </td>
-                    <td className="td text-gray-700 dark:text-gray-300">
-                      {getName(r.primaryDriverId)}
-                    </td>
-                    <td className="td text-gray-700 dark:text-gray-300">
-                      {getName(r.primaryPAId)}
-                    </td>
-                    <td className="td-r font-medium">
-                      {r.dailyRate ? fmt(r.dailyRate) : "—"}
-                    </td>
-                    <td className="td-r text-gray-500 dark:text-gray-400">
-                      {r.driverDailyRate ? fmt(r.driverDailyRate) : "—"}
-                    </td>
-                    <td className="td-r text-gray-500 dark:text-gray-400">
-                      {r.primaryPAId && r.paDailyRate
-                        ? fmt(r.paDailyRate)
-                        : "—"}
-                    </td>
-                    <td className="td-r text-gray-500 dark:text-gray-400">
-                      {r.primaryPAId && r.paPayRate ? fmt(r.paPayRate) : "—"}
-                    </td>
-                    <td className="td-r font-medium text-green-700 dark:text-green-400">
-                      {r.dailyRate && r.driverDailyRate
-                        ? fmt(
-                            r.dailyRate +
-                              (r.paDailyRate || 0) -
-                              (r.driverDailyRate + (r.paPayRate || 0)),
-                          )
-                        : "—"}
-                    </td>
-                    <td className="td">
-                      {r.rateBands?.length > 0 ? (
-                        <span className="chip-blue">
-                          {r.rateBands.length} band
-                          {r.rateBands.length > 1 ? "s" : ""}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-gray-400 dark:text-gray-500">
-                          standard
-                        </span>
-                      )}
-                    </td>
-                    <td className="td">
-                      {r.suspended ? (
-                        <Badge type="partial" label="Suspended" />
-                      ) : (
-                        <Badge type={r.active ? "active" : "inactive"} />
-                      )}
-                    </td>
-                    <td className="td">
-                      <div className="flex gap-1">
-                        <button
-                          className="btn-ghost"
-                          onClick={() => openEdit(r)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="btn-ghost text-blue-500 dark:text-blue-400"
-                          onClick={() => openPOHistory(r)}
-                        >
-                          PO
-                        </button>
-                        <button
-                          className="btn-ghost text-purple-500 dark:text-purple-400"
-                          onClick={() => navigate(`/routes/${r.id}/children`)}
-                        >
-                          Children
-                        </button>
-                        <button
-                          className="btn-ghost text-red-500 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                          onClick={() => del(r.id)}
-                        >
-                          Del
-                        </button>
-                      </div>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead>
+                  <tr className="thead-row">
+                    <th className="th">Route</th>
+                    <th className="th">PO Number</th>
+                    <th className="th">School</th>
+                    <th className="th">Driver</th>
+                    <th className="th">PA</th>
+                    <th className="th-r">Contract rate</th>
+                    <th className="th-r">Driver rate</th>
+                    <th className="th-r">PA rate</th>
+                    <th className="th-r">PA pay</th>
+                    <th className="th-r">Margin/day</th>
+                    <th className="th">Rate bands</th>
+                    <th className="th">Status</th>
+                    <th className="th"></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {filtered.map((r) => (
+                    <tr key={r.id} className="tr">
+                      <td className="td">
+                        <p className="font-semibold text-gray-900 dark:text-gray-100">
+                          Route {cleanNum(r.number)}
+                        </p>
+                        <p className="muted">{r.name}</p>
+                      </td>
+                      <td className="td font-mono text-xs text-gray-500 dark:text-gray-400">
+                        {r.poNumber || "—"}
+                      </td>
+                      <td className="td text-gray-600 dark:text-gray-400">
+                        {r.school || "—"}
+                      </td>
+                      <td className="td text-gray-700 dark:text-gray-300">
+                        {getName(r.primaryDriverId)}
+                      </td>
+                      <td className="td text-gray-700 dark:text-gray-300">
+                        {getName(r.primaryPAId)}
+                      </td>
+                      <td className="td-r font-medium">
+                        {r.dailyRate ? fmt(r.dailyRate) : "—"}
+                      </td>
+                      <td className="td-r text-gray-500 dark:text-gray-400">
+                        {r.driverDailyRate ? fmt(r.driverDailyRate) : "—"}
+                      </td>
+                      <td className="td-r text-gray-500 dark:text-gray-400">
+                        {r.primaryPAId && r.paDailyRate
+                          ? fmt(r.paDailyRate)
+                          : "—"}
+                      </td>
+                      <td className="td-r text-gray-500 dark:text-gray-400">
+                        {r.primaryPAId && r.paPayRate ? fmt(r.paPayRate) : "—"}
+                      </td>
+                      <td className="td-r font-medium text-green-700 dark:text-green-400">
+                        {r.dailyRate && r.driverDailyRate
+                          ? fmt(
+                              r.dailyRate +
+                                (r.paDailyRate || 0) -
+                                (r.driverDailyRate + (r.paPayRate || 0)),
+                            )
+                          : "—"}
+                      </td>
+                      <td className="td">
+                        {r.rateBands?.length > 0 ? (
+                          <span className="chip-blue">
+                            {r.rateBands.length} band
+                            {r.rateBands.length > 1 ? "s" : ""}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400 dark:text-gray-500">
+                            standard
+                          </span>
+                        )}
+                      </td>
+                      <td className="td">
+                        {r.suspended ? (
+                          <Badge type="partial" label="Suspended" />
+                        ) : (
+                          <Badge type={r.active ? "active" : "inactive"} />
+                        )}
+                      </td>
+                      <td className="td">
+                        <div className="flex gap-1">
+                          <button
+                            className="btn-ghost"
+                            onClick={() => openEdit(r)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="btn-ghost text-blue-500 dark:text-blue-400"
+                            onClick={() => openPOHistory(r)}
+                          >
+                            PO
+                          </button>
+                          <button
+                            className="btn-ghost text-purple-500 dark:text-purple-400"
+                            onClick={() => navigate(`/routes/${r.id}/children`)}
+                          >
+                            Children
+                          </button>
+                          <button
+                            className="btn-ghost text-red-500 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            onClick={() => del(r.id)}
+                          >
+                            Del
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
