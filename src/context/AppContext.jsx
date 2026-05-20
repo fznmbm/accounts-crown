@@ -695,7 +695,7 @@ const billingRecipientToDb = (r, uid) => ({
   id: r.id,
   owner_user_id: uid,
   name: r.name,
-  shortName: r.short_name || "",
+  short_name: r.shortName || "",
   address: r.address || "",
   email: r.email || "",
   phone: r.phone || "",
