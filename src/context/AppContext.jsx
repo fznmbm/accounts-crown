@@ -80,7 +80,7 @@ const routeToDb = (r, uid) => ({
   rate_bands: r.rateBands || [],
   notes: r.notes,
   documents: r.documents || [],
-  clientId: r.client_id || null,
+  client_id: r.clientId || null,
   created_at: r.createdAt,
 });
 
