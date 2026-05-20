@@ -35,7 +35,14 @@ export default function Dashboard() {
     staffLicences,
     staffTraining,
     submissions,
+    billingRecipients,
   } = useApp();
+  const defaultRecipient =
+    billingRecipients?.find((r) => r.isDefault) ||
+    billingRecipients?.[0] ||
+    null;
+  const clientLabel =
+    defaultRecipient?.shortName || defaultRecipient?.name || "Client";
   const [month, setMonth] = useState(() => {
     const s = localStorage.getItem("dash_month");
     return s !== null ? parseInt(s) : currentMonth();
@@ -127,7 +134,11 @@ export default function Dashboard() {
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader
         title="Dashboard"
-        subtitle="Crown Cars Ltd — Account overview"
+        subtitle={
+          settings?.companyName
+            ? `${settings.companyName} — Account overview`
+            : "Account overview"
+        }
         actions={
           <div className="flex gap-2">
             <select
@@ -173,7 +184,7 @@ export default function Dashboard() {
             color="blue"
           />
           <MetricCard
-            label="Received (WSCC)"
+            label={`Received (${clientLabel})`}
             value={fmt(received)}
             color="green"
           />
@@ -699,7 +710,7 @@ export default function Dashboard() {
                   <div>
                     <div className="flex items-center justify-between text-xs mb-1">
                       <span className="text-gray-500 dark:text-gray-400">
-                        WSCC income
+                        {clientLabel} income
                       </span>
                       <span className="font-medium text-gray-900 dark:text-gray-100">
                         {fmt(alreadyReceived + expectedFromWSCC)}
@@ -724,11 +735,11 @@ export default function Dashboard() {
                     <div className="flex items-center gap-4 mt-1">
                       <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
                         <span className="w-2 h-2 rounded-full bg-green-500 dark:bg-green-600 inline-block" />
-                        Received {fmt(alreadyReceived)}
+                        {clientLabel} received {fmt(alreadyReceived)}
                       </span>
                       <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
                         <span className="w-2 h-2 rounded-full bg-green-200 dark:bg-green-900 inline-block" />
-                        Expected {fmt(expectedFromWSCC)}
+                        {clientLabel} expected {fmt(expectedFromWSCC)}
                       </span>
                     </div>
                   </div>
@@ -794,7 +805,7 @@ export default function Dashboard() {
                       <span className="chip-green">✓ Safe to pay staff</span>
                     ) : (
                       <span className="chip-red">
-                        ⚠ Await WSCC payment first
+                        ⚠ Await {clientLabel} payment first
                       </span>
                     )}
                   </div>

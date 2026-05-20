@@ -31,7 +31,7 @@ function exportMonthlyPL(monthly, year) {
   const header = [
     "Month",
     "Invoiced",
-    "WSCC Received",
+    `${clientLabel} Received`,
     "Net (ex-VAT)",
     "VAT Collected",
     "Staff Costs",
@@ -48,7 +48,7 @@ function exportMonthlyPL(monthly, year) {
     m.profit.toFixed(2),
     m.received > 0 ? ((m.profit / m.received) * 100).toFixed(1) + "%" : "",
   ]);
-  downloadCSV(`crown-cars-pl-${year}.csv`, [header, ...rows]);
+  downloadCSV(`pl-${year}.csv`, [header, ...rows]);
 }
 
 function exportVAT(quarters, year) {
@@ -59,7 +59,7 @@ function exportVAT(quarters, year) {
     q.vat.toFixed(2),
     q.gross.toFixed(2),
   ]);
-  downloadCSV(`crown-cars-vat-${year}.csv`, [header, ...rows]);
+  downloadCSV(`vat-${year}.csv`, [header, ...rows]);
 }
 
 function exportInvoices(invoices, year) {
@@ -94,7 +94,7 @@ function exportInvoices(invoices, year) {
     x.paidAmount?.toFixed(2),
     x.status,
   ]);
-  downloadCSV(`crown-cars-invoices-${year}.csv`, [header, ...rows]);
+  downloadCSV(`invoices-${year}.csv`, [header, ...rows]);
 }
 
 function exportStaffPayments(payments, staff, year) {
@@ -121,7 +121,7 @@ function exportStaffPayments(payments, staff, year) {
     p.amount.toFixed(2),
     p.isExternal ? "Yes" : "No",
   ]);
-  downloadCSV(`crown-cars-staff-payments-${year}.csv`, [header, ...rows]);
+  downloadCSV(`staff-payments-${year}.csv`, [header, ...rows]);
 }
 
 // const cleanNum = (n) =>
@@ -131,7 +131,21 @@ function exportStaffPayments(payments, staff, year) {
 
 // ── Component ────────────────────────────────────────────────────────────────
 export default function Reports() {
-  const { invoices, payments, staff, routes, allocations, settings } = useApp();
+  const {
+    invoices,
+    payments,
+    staff,
+    routes,
+    allocations,
+    settings,
+    billingRecipients,
+  } = useApp();
+  const defaultRecipient =
+    billingRecipients?.find((r) => r.isDefault) ||
+    billingRecipients?.[0] ||
+    null;
+  const clientLabel =
+    defaultRecipient?.shortName || defaultRecipient?.name || "Client";
   const [year, setYear] = useState(() => {
     const s = localStorage.getItem("reports_year");
     return s !== null ? parseInt(s) : currentYear();
@@ -343,7 +357,7 @@ export default function Reports() {
             color="blue"
           />
           <MetricCard
-            label="WSCC received"
+            label={`${clientLabel} received`}
             value={fmt(totals.received)}
             color="green"
           />
@@ -386,7 +400,7 @@ export default function Reports() {
                   {[
                     "Month",
                     "Invoiced",
-                    "WSCC received",
+                    `${clientLabel} received`,
                     "Net (ex-VAT)",
                     "VAT",
                     "Staff costs",

@@ -718,7 +718,7 @@ export default function Allocations() {
             </FormGrid>
 
             <FormField
-              label="Total days invoiced to WSCC"
+              label="Total days invoiced"
               hint="Must match the invoice for this route"
             >
               <div className="flex items-center gap-3">

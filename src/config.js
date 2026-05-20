@@ -6,20 +6,17 @@
 
 export const CONFIG = {
   // ── Branding ─────────────────────────────────────────────────
-  companyName: import.meta.env.VITE_COMPANY_NAME || "Crown Cars Ltd",
-  companyInitials: import.meta.env.VITE_COMPANY_INITIALS || "CC",
+  companyName: import.meta.env.VITE_COMPANY_NAME || "",
+  companyInitials: import.meta.env.VITE_COMPANY_INITIALS || "",
   primaryColour: import.meta.env.VITE_PRIMARY_COLOUR || "#1d4ed8",
-  councilName:
-    import.meta.env.VITE_COUNCIL_NAME || "West Sussex County Council",
-  supplierNumber: import.meta.env.VITE_SUPPLIER_NUMBER || "103820",
+  councilName: import.meta.env.VITE_COUNCIL_NAME || "",
+  supplierNumber: import.meta.env.VITE_SUPPLIER_NUMBER || "",
 
   // ── Licence key ──────────────────────────────────────────────
-  licenceKey: "CROWN-CARS-2026-LIVE",
+  licenceKey: import.meta.env.VITE_LICENCE_KEY || "",
 
   // ── Auth ─────────────────────────────────────────────────────
-  ownerUserId:
-    import.meta.env.VITE_OWNER_USER_ID ||
-    "f3cf0783-92e2-4269-a7e1-e9b3db6203a3",
+  ownerUserId: import.meta.env.VITE_OWNER_USER_ID || "",
 
   // ── Client's Supabase project ─────────────────────────────────
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL,

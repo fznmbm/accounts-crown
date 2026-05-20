@@ -18,7 +18,19 @@ const normalizeInvoiceNum = (n) => {
 };
 
 export default function Remittances() {
-  const { remittances, setRemittances, invoices, setInvoices } = useApp();
+  const {
+    remittances,
+    setRemittances,
+    invoices,
+    setInvoices,
+    billingRecipients,
+  } = useApp();
+  const defaultRecipient =
+    billingRecipients?.find((r) => r.isDefault) ||
+    billingRecipients?.[0] ||
+    null;
+  const clientLabel =
+    defaultRecipient?.shortName || defaultRecipient?.name || "Client";
   const [parsing, setParsing] = useState(false);
   const [parseErr, setParseErr] = useState("");
   const [preview, setPreview] = useState(null);
@@ -33,7 +45,7 @@ export default function Remittances() {
       const r = await parseRemittancePDF(files[0]);
       if (r.items.length === 0)
         setParseErr(
-          "No invoice data found. Check this is a WSCC remittance advice PDF.",
+          `No invoice data found. Check this is a ${clientLabel} remittance advice PDF.`,
         );
       else setPreview(r);
     } catch (e) {
@@ -121,7 +133,7 @@ export default function Remittances() {
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader
         title="Remittances"
-        subtitle="Upload WSCC payment advice PDFs to auto-reconcile invoices"
+        subtitle={`Upload ${clientLabel} payment advice PDFs to auto-reconcile invoices`}
       />
 
       <div className="page-body">
@@ -133,7 +145,7 @@ export default function Remittances() {
               label={
                 parsing
                   ? "Parsing remittance PDF…"
-                  : "Drop WSCC remittance advice PDF here"
+                  : `Drop ${clientLabel} remittance advice PDF here`
               }
               sublabel="One remittance at a time"
             />
@@ -231,7 +243,7 @@ export default function Remittances() {
           <EmptyState
             icon="💳"
             title="No remittances yet"
-            description="Upload your first WSCC remittance advice PDF above."
+            description={`Upload your first ${clientLabel} remittance advice PDF above.`}
           />
         ) : (
           <div className="card overflow-hidden">

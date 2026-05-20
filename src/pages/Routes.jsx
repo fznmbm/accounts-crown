@@ -27,10 +27,18 @@ const EMPTY = {
   rateBands: [],
   documents: [],
   operationalDays: [1, 2, 3, 4, 5],
+  clientId: "",
 };
 
 export default function Routes() {
-  const { routes, setRoutes, staff, poHistory, setPoHistory } = useApp();
+  const {
+    routes,
+    setRoutes,
+    staff,
+    poHistory,
+    setPoHistory,
+    billingRecipients,
+  } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
@@ -55,7 +63,11 @@ export default function Routes() {
   const pas = staff.filter((s) => s.type === "pa" || s.type === "driver_pa");
 
   const openAdd = () => {
-    setForm(EMPTY);
+    const defaultR =
+      billingRecipients.find((r) => r.isDefault && r.active) ||
+      billingRecipients.find((r) => r.active) ||
+      null;
+    setForm({ ...EMPTY, clientId: defaultR?.id || "" });
     setEditing(null);
     setShowModal(true);
   };
@@ -107,7 +119,7 @@ export default function Routes() {
       (!form.dailyRate || parseFloat(form.dailyRate) === 0)
     ) {
       const ok = await showConfirm({
-        title: "WSCC rate is £0",
+        title: "Contract rate is £0",
         message:
           "Invoices will generate as £0 for this active route. Save anyway?",
         type: "warning",
@@ -262,9 +274,9 @@ export default function Routes() {
                   <th className="th">School</th>
                   <th className="th">Driver</th>
                   <th className="th">PA</th>
-                  <th className="th-r">WSCC rate</th>
+                  <th className="th-r">Contract rate</th>
                   <th className="th-r">Driver rate</th>
-                  <th className="th-r">PA WSCC</th>
+                  <th className="th-r">PA rate</th>
                   <th className="th-r">PA pay</th>
                   <th className="th-r">Margin/day</th>
                   <th className="th">Rate bands</th>
@@ -396,6 +408,28 @@ export default function Routes() {
                 />
               </FormField>
             </FormGrid>
+            {billingRecipients.filter((r) => r.active).length > 0 && (
+              <FormField
+                label="Client"
+                hint="Which billing recipient this route is invoiced to"
+              >
+                <select
+                  className="input"
+                  value={form.clientId || ""}
+                  onChange={f("clientId")}
+                >
+                  <option value="">No client assigned</option>
+                  {billingRecipients
+                    .filter((r) => r.active)
+                    .map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.shortName ? `${r.shortName} — ${r.name}` : r.name}
+                        {r.isDefault ? " (default)" : ""}
+                      </option>
+                    ))}
+                </select>
+              </FormField>
+            )}
             <FormGrid cols={2}>
               <FormField label="PO number">
                 <input
@@ -446,8 +480,8 @@ export default function Routes() {
             </FormGrid>
             <FormGrid cols={2}>
               <FormField
-                label="WSCC driver rate (£)"
-                hint="What WSCC pays you for the driver"
+                label="Contract driver rate (£)"
+                hint="What the client pays you for the driver"
               >
                 <input
                   className="input"
@@ -475,8 +509,8 @@ export default function Routes() {
             {form.primaryPAId && (
               <FormGrid cols={2}>
                 <FormField
-                  label="WSCC PA rate (£)"
-                  hint="What WSCC pays you for the PA"
+                  label="Contract PA rate (£)"
+                  hint="What the client pays you for the PA"
                 >
                   <input
                     className="input"
@@ -564,8 +598,9 @@ export default function Routes() {
 
               {(form.rateBands || []).length === 0 && (
                 <p className="text-xs text-gray-400 dark:text-gray-500">
-                  No bands — uses the standard WSCC / driver rates above. Add
-                  bands if this route has different prices on different days.
+                  No bands — uses the standard contract / driver rates above.
+                  Add bands if this route has different prices on different
+                  days.
                 </p>
               )}
 
@@ -654,7 +689,7 @@ export default function Routes() {
                       )}
                     </div>
                     <div>
-                      <label className="label mb-1">WSCC rate (£)</label>
+                      <label className="label mb-1">Contract rate (£)</label>
                       <input
                         className="input text-sm"
                         type="number"

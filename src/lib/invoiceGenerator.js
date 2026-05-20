@@ -14,11 +14,10 @@ export function generateInvoicePDF({
   bands,
   notes,
   standardDays = 0,
+  recipient = null,
 }) {
   const vatRate = Number(settings?.vatRate || 20);
-  const address = (
-    settings.address || "1, John Brackpool Close, Crawley, RH10 8FA"
-  ).replace(/\n/g, ", ");
+  const address = (settings?.address || "").replace(/\n/g, ", ");
 
   // If route has rate bands and caller passed band days, use bands — otherwise single rate
   const usesBands =
@@ -132,14 +131,15 @@ tbody td { border: 1px solid #bbb; padding: 6px 10px; }
 <div class="page">
   <div class="top">
     <div>
-      <p style="margin-bottom:14px"><strong>Date</strong></p>
-      <p>To :West Sussex County Council &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${invoiceDate}</p>
-      <p>County Hall</p>
-      <p>West Street</p>
-      <p>Chichester</p>
-      <p>PO19 1RQ</p>
+<p style="margin-bottom:14px"><strong>Date</strong> &nbsp; ${invoiceDate}</p>
+      <p><strong>To:</strong> ${recipient?.name || ""}</p>
+      ${(recipient?.address || "")
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => `<p>${l}</p>`)
+        .join("")}
       <br/>
-      <p>From : ${settings.companyName || "Crown Cars Ltd"}</p>
+      <p><strong>From:</strong> ${settings?.companyName || ""}</p>
       <p>${address}</p>
       <p>Phone- ${settings.phone || ""}</p>
       <p>Email- ${settings.email || ""}</p>
@@ -149,7 +149,7 @@ tbody td { border: 1px solid #bbb; padding: 6px 10px; }
 
   <div class="meta" style="margin-bottom:18px">
     <p><strong>Invoice Number</strong> &nbsp; ${invoiceNumber}</p>
-    <p><strong>Vendor Number</strong> &nbsp; ${settings.supplierNumber || "103820"}</p>
+    <p><strong>Vendor Number</strong> &nbsp; ${recipient?.supplierRef || settings?.supplierNumber || ""}</p>
     <p><strong>Purchase Order Number</strong> &nbsp; ${route.poNumber || ""}</p>
   </div>
 
@@ -188,7 +188,7 @@ tbody td { border: 1px solid #bbb; padding: 6px 10px; }
   <div class="footer">
     <p>Payment Method &nbsp;-</p>
     <p>Vat registration number &nbsp;- &nbsp;${settings.vatNumber || ""}</p>
-    <p>Name &nbsp;${settings.accountName || settings.companyName || "Crown Cars Ltd"}</p>
+   <p>Name &nbsp;${settings?.accountName || settings?.companyName || ""}</p>
     <p>AC No &nbsp;${settings.accountNo || ""}</p>
     <p>Sort Code &nbsp;${settings.sortCode || ""}</p>
   </div>

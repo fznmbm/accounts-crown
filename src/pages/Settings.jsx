@@ -256,6 +256,7 @@ export default function Settings() {
   const [editingBr, setEditingBr] = useState(null);
   const [brForm, setBrForm] = useState({
     name: "",
+    shortName: "",
     address: "",
     email: "",
     phone: "",
@@ -271,6 +272,7 @@ export default function Settings() {
   const openAddBr = () => {
     setBrForm({
       name: "",
+      shortName: "",
       address: "",
       email: "",
       phone: "",
@@ -300,6 +302,7 @@ export default function Settings() {
     const record = {
       id: editingBr?.id || uid(),
       name: brForm.name.trim(),
+      shortName: brForm.shortName?.trim() || "",
       address: brForm.address || "",
       email: brForm.email || "",
       phone: brForm.phone || "",
@@ -518,7 +521,7 @@ export default function Settings() {
                   className="input font-mono"
                   value={form.vatNumber}
                   onChange={f("vatNumber")}
-                  placeholder="329462388"
+                  placeholder="e.g. 123456789"
                 />
               </FormField>
               <FormField label="VAT rate (%)">
@@ -531,12 +534,12 @@ export default function Settings() {
                 />
               </FormField>
             </FormGrid>
-            <FormField label="WSCC supplier number">
+            <FormField label="Supplier Reference">
               <input
                 className="input font-mono w-48"
                 value={form.supplierNumber}
                 onChange={f("supplierNumber")}
-                placeholder="103820"
+                placeholder="e.g. 000000"
               />
             </FormField>
           </div>
@@ -559,7 +562,7 @@ export default function Settings() {
                   className="input font-mono"
                   value={form.sortCode}
                   onChange={f("sortCode")}
-                  placeholder="30-99-50"
+                  placeholder="e.g. 00-00-00"
                 />
               </FormField>
               <FormField label="Account number">
@@ -567,7 +570,7 @@ export default function Settings() {
                   className="input font-mono"
                   value={form.accountNo}
                   onChange={f("accountNo")}
-                  placeholder="48755760"
+                  placeholder="e.g. 00000000"
                 />
               </FormField>
             </FormGrid>
@@ -620,6 +623,11 @@ export default function Settings() {
                           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                             {r.name}
                           </p>
+                          {r.shortName && (
+                            <span className="text-xs font-mono text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+                              {r.shortName}
+                            </span>
+                          )}
                           {r.isDefault && (
                             <span className="chip-green text-xs">Default</span>
                           )}
@@ -1003,7 +1011,7 @@ export default function Settings() {
                   });
                   const a = document.createElement("a");
                   a.href = URL.createObjectURL(blob);
-                  a.download = `crown-cars-backup-${new Date().toISOString().split("T")[0]}.json`;
+                  a.download = `backup-${new Date().toISOString().split("T")[0]}.json`;
                   a.click();
                 }}
               >
@@ -1031,13 +1039,24 @@ export default function Settings() {
                 autoFocus
               />
             </FormField>
+            <FormField
+              label="Short name"
+              hint="Abbreviation used in labels and charts (e.g. WSCC)"
+            >
+              <input
+                className="input w-40"
+                value={brForm.shortName || ""}
+                onChange={bf("shortName")}
+                placeholder="e.g. WSCC"
+              />
+            </FormField>
             <FormField label="Address">
               <textarea
                 className="input"
                 rows={3}
                 value={brForm.address}
                 onChange={bf("address")}
-                placeholder={"County Hall\nWest Street\nChichester\nPO19 1RQ"}
+                placeholder={"Street\nTown\nCounty\nPostcode"}
               />
             </FormField>
             <FormGrid cols={2}>
@@ -1066,7 +1085,7 @@ export default function Settings() {
                 className="input font-mono w-48"
                 value={brForm.supplierRef}
                 onChange={bf("supplierRef")}
-                placeholder="e.g. 103820"
+                placeholder="e.g. 000000"
               />
             </FormField>
             <FormField

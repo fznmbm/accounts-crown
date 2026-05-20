@@ -3,16 +3,16 @@ import { supabase, AUTH_STORAGE_KEY } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
 
 export const DEFAULT_SETTINGS = {
-  companyName: "Crown Cars Ltd",
+  companyName: "",
   logoUrl: "",
-  address: "1 John Brackpool Close, Crawley, RH10 8FA",
-  phone: "01444 300315",
-  email: "crowncarslimited@gmail.com",
-  vatNumber: "329462388",
-  accountName: "Crown Cars Ltd",
-  accountNo: "48755760",
-  sortCode: "30-99-50",
-  supplierNumber: "103820",
+  address: "",
+  phone: "",
+  email: "",
+  vatNumber: "",
+  accountName: "",
+  accountNo: "",
+  sortCode: "",
+  supplierNumber: "",
   vatRate: 20,
   cloudinaryCloudName: "",
   cloudinaryUploadPreset: "",
@@ -58,6 +58,7 @@ const routeFromDb = (r) => ({
   rateBands: r.rate_bands || [],
   notes: r.notes,
   documents: r.documents || [],
+  clientId: r.client_id || null,
   createdAt: r.created_at,
 });
 const routeToDb = (r, uid) => ({
@@ -79,6 +80,7 @@ const routeToDb = (r, uid) => ({
   rate_bands: r.rateBands || [],
   notes: r.notes,
   documents: r.documents || [],
+  clientId: r.client_id || null,
   created_at: r.createdAt,
 });
 
@@ -678,6 +680,7 @@ const applicationToDb = (a, uid) => ({
 const billingRecipientFromDb = (r) => ({
   id: r.id,
   name: r.name,
+  shortName: r.short_name || "",
   address: r.address || "",
   email: r.email || "",
   phone: r.phone || "",
@@ -692,6 +695,7 @@ const billingRecipientToDb = (r, uid) => ({
   id: r.id,
   owner_user_id: uid,
   name: r.name,
+  shortName: r.short_name || "",
   address: r.address || "",
   email: r.email || "",
   phone: r.phone || "",

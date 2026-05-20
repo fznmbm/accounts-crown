@@ -115,9 +115,9 @@ export function generateInvoicePDFBlob({
   recipient = null,
 }) {
   const vatRate = Number(settings?.vatRate || 20);
-  const addressParts = (
-    settings?.address || "1 John Brackpool Close\nCrawley\nRH10 8FA"
-  ).split(/\n|,\s*/);
+  const addressParts = (settings?.address || "")
+    .split(/\n|,\s*/)
+    .filter(Boolean);
 
   const lines = buildLines({ route, bands, notes, standardDays, daysWorked });
   const netTotal =
@@ -144,10 +144,8 @@ export function generateInvoicePDFBlob({
   doc.text(invoiceDate, M + 16, y + 2);
   y += 8;
 
-  const recipientName = recipient?.name || "West Sussex County Council";
-  const recipientAddressLines = (
-    recipient?.address || "County Hall\nWest Street\nChichester\nPO19 1RQ"
-  )
+  const recipientName = recipient?.name || "";
+  const recipientAddressLines = (recipient?.address || "")
     .split("\n")
     .filter(Boolean);
 
@@ -166,11 +164,7 @@ export function generateInvoicePDFBlob({
   doc.setFont("helvetica", "bold");
   doc.text("From: ", M, y);
   doc.setFont("helvetica", "normal");
-  doc.text(
-    settings?.companyName || "Crown Cars Ltd",
-    M + doc.getTextWidth("From: "),
-    y,
-  );
+  doc.text(settings?.companyName || "", M + doc.getTextWidth("From: "), y);
   y += 5;
   [
     ...addressParts,
@@ -188,10 +182,7 @@ export function generateInvoicePDFBlob({
   // ── Meta block ────────────────────────────────────────────────────────────
   [
     ["Invoice Number", String(invoiceNumber)],
-    [
-      "Vendor Number",
-      recipient?.supplierRef || settings?.supplierNumber || "103820",
-    ],
+    ["Vendor Number", recipient?.supplierRef || settings?.supplierNumber || ""],
     ["Purchase Order Number", route.poNumber || "—"],
   ].forEach(([label, value]) => {
     doc.setFont("helvetica", "bold");
@@ -294,10 +285,7 @@ export function generateInvoicePDFBlob({
   const footerRows = [
     ["Payment Method", "—"],
     ["VAT Registration No.", settings?.vatNumber || ""],
-    [
-      "Name",
-      settings?.accountName || settings?.companyName || "Crown Cars Ltd",
-    ],
+    ["Name", settings?.accountName || settings?.companyName || ""],
     ["Account No.", settings?.accountNo || ""],
     ["Sort Code", settings?.sortCode || ""],
   ];

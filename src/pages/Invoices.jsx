@@ -18,7 +18,8 @@ import {
   currentYear,
   cleanNum,
 } from "../lib/utils";
-import { generateInvoicePDF } from "../lib/invoiceGenerator";
+// invoiceGenerator (HTML popup) removed — ZIP generation uses invoicePDFBlob exclusively
+//import { generateInvoicePDF } from "../lib/invoiceGenerator";
 import { generateInvoicePDFBlob } from "../lib/invoicePDFBlob";
 import JSZip from "jszip";
 
@@ -425,6 +426,12 @@ export default function Invoices() {
             <button
               className="btn-secondary"
               onClick={() => {
+                if (billingRecipients.filter((r) => r.active).length === 0) {
+                  toast.error(
+                    "Add a billing recipient in Settings before generating invoices.",
+                  );
+                  return;
+                }
                 const defaultR =
                   billingRecipients.find((r) => r.isDefault && r.active) ||
                   billingRecipients.find((r) => r.active) ||
@@ -1220,7 +1227,7 @@ export default function Invoices() {
                 try {
                   const zip = new JSZip();
                   const folder = zip.folder(
-                    `Crown-Cars-Invoices-${MONTHS[genMonth]}-${genYear}`,
+                    `Invoices-${MONTHS[genMonth]}-${genYear}`,
                   );
                   for (const inv of fresh) {
                     const blob = generateInvoicePDFBlob({
@@ -1257,7 +1264,7 @@ export default function Invoices() {
                   const url = URL.createObjectURL(zipBlob);
                   const a = document.createElement("a");
                   a.href = url;
-                  a.download = `Crown-Cars-Invoices-${MONTHS[genMonth]}-${genYear}.zip`;
+                  a.download = `Invoices-${MONTHS[genMonth]}-${genYear}.zip`;
                   document.body.appendChild(a);
                   a.click();
                   document.body.removeChild(a);

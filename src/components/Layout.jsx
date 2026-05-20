@@ -63,7 +63,11 @@ function MoonIcon() {
 export default function Layout() {
   const { dark, toggle } = useTheme();
   const { user, logout } = useAuth();
-  const { settings, applications, submissions } = useApp();
+  const { settings, applications, submissions, billingRecipients } = useApp();
+  const defaultRecipient =
+    billingRecipients?.find((r) => r.isDefault) ||
+    billingRecipients?.[0] ||
+    null;
   const pendingCount =
     applications?.filter((a) => a.status === "pending").length || 0;
   const pendingSubmissions =
@@ -95,9 +99,14 @@ export default function Layout() {
               <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 leading-tight">
                 {CONFIG.companyName}
               </p>
-              <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">
-                WSCC · {CONFIG.supplierNumber || "103820"}
-              </p>
+              {defaultRecipient && (
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight truncate">
+                  {defaultRecipient.name}
+                  {defaultRecipient.supplierRef
+                    ? ` · ${defaultRecipient.supplierRef}`
+                    : ""}
+                </p>
+              )}
             </div>
           </div>
         </div>
