@@ -106,6 +106,130 @@ export default function Applications() {
     setViewing(null);
   };
 
+  const printApplication = (app) => {
+    const fmtD2 = (d) =>
+      d
+        ? new Date(d).toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })
+        : "—";
+    const row = (label, value, mono = false) =>
+      value !== undefined && value !== null && value !== ""
+        ? `<div class="row"><span class="label">${label}</span><span class="${mono ? "mono" : "val"}">${value}</span></div>`
+        : "";
+    const section = (title, content) =>
+      `<div class="section"><div class="sec-hdr">${title}</div>${content}</div>`;
+
+    const refs = (app.applicantRefs || [])
+      .map((ref, i) =>
+        section(
+          `Reference ${i + 1}`,
+          row("Name", ref.name) +
+            row("Phone", ref.phone) +
+            row("Relationship", ref.relationship) +
+            row("Address", ref.address) +
+            (ref.email ? row("Email", ref.email) : ""),
+        ),
+      )
+      .join("");
+
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+      <title>Application — ${app.fullName}</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:Arial,sans-serif;font-size:10pt;color:#000;padding:18mm}
+        .bar{background:#1d4ed8;color:#fff;padding:8px 18px;display:flex;align-items:center;gap:12px;margin:-18mm -18mm 18px -18mm}
+        .bar button{background:#fff;color:#1d4ed8;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-weight:bold}
+        h1{font-size:16pt;text-align:center}
+        .sub{text-align:center;color:#555;font-size:9.5pt;margin:4px 0 16px}
+        .meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;background:#f5f5f5;padding:10px;border-radius:6px;margin-bottom:16px}
+        .mi p:first-child{font-size:8pt;color:#666;text-transform:uppercase}
+        .mi p:last-child{font-weight:bold}
+        .section{margin-bottom:14px;break-inside:avoid}
+        .sec-hdr{font-weight:bold;font-size:9pt;text-transform:uppercase;color:#555;padding:5px 0;border-bottom:1px solid #ccc;margin-bottom:6px}
+        .row{display:flex;justify-content:space-between;align-items:flex-start;padding:3px 0;border-bottom:1px solid #f0f0f0;gap:12px}
+        .label{font-size:8.5pt;color:#666;flex-shrink:0}
+        .val{font-size:9pt;font-weight:500;text-align:right}
+        .mono{font-family:monospace;font-size:9pt;text-align:right}
+        .chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:8.5pt;font-weight:bold;text-transform:capitalize}
+        .chip-pending{background:#fef3c7;color:#92400e}
+        .chip-approved{background:#d1fae5;color:#065f46}
+        .chip-rejected{background:#fee2e2;color:#991b1b}
+        .green{color:#16a34a}
+        .amber{color:#d97706}
+        .red{color:#dc2626}
+        @media print{.bar{display:none!important}}
+      </style></head><body>
+      <div class="bar">
+        <span>Application — ${app.fullName}</span>
+        <button onclick="window.print()">Save as PDF</button>
+      </div>
+      <h1>Staff Application</h1>
+      <p class="sub">${app.fullName} — Applied ${new Date(app.createdAt).toLocaleDateString("en-GB")}</p>
+      <div class="meta">
+        <div class="mi"><p>Status</p><p><span class="chip chip-${app.status}">${app.status}</span></p></div>
+        <div class="mi"><p>Position</p><p style="text-transform:capitalize">${app.positionType}</p></div>
+        <div class="mi"><p>Applied</p><p>${new Date(app.createdAt).toLocaleDateString("en-GB")}</p></div>
+      </div>
+      ${section(
+        "Personal Information",
+        row("Full Name", app.fullName) +
+          row("Email", app.email) +
+          row("Phone", app.phone) +
+          row("NI Number", app.niNumber, true) +
+          row("Nationality", app.nationality) +
+          row("Current Address", app.currentAddress) +
+          (app.previousAddress
+            ? row("Previous Address", app.previousAddress)
+            : ""),
+      )}
+      ${section(
+        "Work Eligibility",
+        row("UK Driving Licence", app.hasUkDrivingLicence ? "✓ Yes" : "No") +
+          row("Work Permit Required", app.requiresWorkPermit ? "⚠ Yes" : "No") +
+          (app.requiresWorkPermit
+            ? row("Work Permit Number", app.workPermitNumber, true)
+            : ""),
+      )}
+      ${section(
+        "Convictions",
+        row("Has Convictions", app.hasConvictions ? "⚠ Yes" : "No") +
+          (app.hasConvictions ? row("Details", app.convictionDetails) : ""),
+      )}
+      ${section(
+        "DBS",
+        row(
+          "DBS Update Service",
+          app.dbsRegistered ? "✓ Registered" : "Not registered",
+        ) +
+          (app.dbsRegistered
+            ? row("Name on Certificate", app.dbsName) +
+              row("Date of Birth", fmtD2(app.dbsDob)) +
+              row("Certificate Number", app.dbsCertNumber, true) +
+              (app.dbsUpdateId
+                ? row("Update Service ID", app.dbsUpdateId, true)
+                : "")
+            : ""),
+      )}
+      ${refs}
+      ${section(
+        "Declaration",
+        row("Agreed", app.declarationAgreed ? "Yes" : "No") +
+          row("Signed by", app.declarationName) +
+          row("Date", fmtD2(app.declarationDate)),
+      )}
+      ${app.adminNotes ? section("Admin Notes", `<p style="font-size:9pt;color:#555;font-style:italic">${app.adminNotes}</p>`) : ""}
+    </body></html>`;
+
+    const win = window.open("", "_blank", "width=900,height=800");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    } else alert("Pop-up blocked — please allow pop-ups for this site.");
+  };
+
   const af = (k) => (e) =>
     setApproveForm((p) => ({ ...p, [k]: e.target.value }));
 
@@ -266,12 +390,21 @@ export default function Applications() {
               <h3 className="font-semibold text-gray-900 dark:text-gray-100">
                 {viewing.fullName}
               </h3>
-              <button
-                onClick={() => setViewing(null)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg"
-              >
-                ×
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => printApplication(viewing)}
+                  className="btn-ghost text-xs"
+                  title="Save as PDF"
+                >
+                  ↓ PDF
+                </button>
+                <button
+                  onClick={() => setViewing(null)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg"
+                >
+                  ×
+                </button>
+              </div>
             </div>
 
             <div className="p-4 space-y-5 text-sm">

@@ -171,6 +171,109 @@ export default function InvoiceSubmissions() {
     if (viewing?.id === sub.id) setViewing({ ...sub, status: "rejected" });
   };
 
+  const printSubmission = (sub) => {
+    const fmtA = (n) =>
+      `£${Number(n || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fmtD = (d) =>
+      d
+        ? new Date(d).toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })
+        : "—";
+
+    const routeRows = (sub.routeEntries || [])
+      .map(
+        (r, i) => `
+      <div class="section">
+        <div class="sec-hdr">Route ${i + 1}: ${r.routeName}<span class="green">${fmtA(r.total)}</span></div>
+        ${[...(r.days || [])]
+          .sort((a, b) => a.date.localeCompare(b.date))
+          .map(
+            (d) => `
+          <div class="row"><span>${new Date(d.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</span><span>${fmtA(d.amount)}</span></div>`,
+          )
+          .join("")}
+        ${(r.weekendDays || [])
+          .filter((d) => d.date)
+          .map(
+            (d) => `
+          <div class="row"><span>${new Date(d.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} (weekend)</span><span>${fmtA(d.amount)}</span></div>`,
+          )
+          .join("")}
+      </div>`,
+      )
+      .join("");
+
+    const coverRows =
+      (sub.coverEntries || []).length > 0
+        ? `
+      <div class="section">
+        <div class="sec-hdr">Cover / Extra Work</div>
+        ${(sub.coverEntries || [])
+          .map(
+            (c) => `
+          <div class="row"><span>${c.description} — ${fmtD(c.date)}</span><span>${fmtA(c.amount)}</span></div>`,
+          )
+          .join("")}
+      </div>`
+        : "";
+
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+      <title>Submission — ${sub.staffName} — ${MONTHS[sub.month]} ${sub.year}</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:Arial,sans-serif;font-size:10pt;color:#000;padding:18mm}
+        .bar{background:#1d4ed8;color:#fff;padding:8px 18px;display:flex;align-items:center;gap:12px;margin:-18mm -18mm 18px -18mm}
+        .bar button{background:#fff;color:#1d4ed8;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-weight:bold}
+        h1{font-size:16pt;text-align:center}
+        .sub{text-align:center;color:#555;font-size:9.5pt;margin:4px 0 16px}
+        .meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f5f5f5;padding:10px;border-radius:6px;margin-bottom:16px}
+        .mi p:first-child{font-size:8pt;color:#666;text-transform:uppercase}
+        .mi p:last-child{font-weight:bold}
+        .section{margin-bottom:14px}
+        .sec-hdr{display:flex;justify-content:space-between;font-weight:bold;font-size:9pt;text-transform:uppercase;color:#555;padding:5px 0;border-bottom:1px solid #ccc;margin-bottom:5px}
+        .row{display:flex;justify-content:space-between;padding:2.5px 0;font-size:9.5pt;border-bottom:1px solid #f0f0f0}
+        .total{display:flex;justify-content:space-between;font-weight:bold;font-size:11pt;padding:10px 0;border-top:2px solid #000;margin-top:10px}
+        .decl{margin-top:16px;background:#f5f5f5;padding:10px;border-radius:6px;font-size:9pt}
+        .green{color:#16a34a}
+        .chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:8.5pt;font-weight:bold;text-transform:capitalize}
+        .chip-submitted{background:#fef3c7;color:#92400e}
+        .chip-approved{background:#d1fae5;color:#065f46}
+        .chip-rejected{background:#fee2e2;color:#991b1b}
+        .chip-recalled{background:#ede9fe;color:#5b21b6}
+        @media print{.bar{display:none!important}}
+      </style></head><body>
+      <div class="bar">
+        <span>${sub.staffName} — ${MONTHS[sub.month]} ${sub.year} Invoice Submission</span>
+        <button onclick="window.print()">Save as PDF</button>
+      </div>
+      <h1>Invoice Submission</h1>
+      <p class="sub">${sub.staffName} — ${MONTHS[sub.month]} ${sub.year}</p>
+      <div class="meta">
+        <div class="mi"><p>Status</p><p><span class="chip chip-${sub.status}">${sub.status}</span></p></div>
+        <div class="mi"><p>Total Claimed</p><p class="green">${fmtA(sub.invoiceAmount)}</p></div>
+        <div class="mi"><p>Period</p><p>${fmtD(sub.periodFrom)} – ${fmtD(sub.periodTo)}</p></div>
+        <div class="mi"><p>Submitted</p><p>${sub.submittedAt ? new Date(sub.submittedAt).toLocaleDateString("en-GB") : "—"}</p></div>
+      </div>
+      ${routeRows}${coverRows}
+      <div class="total"><span>Total Claimed</span><span class="green">${fmtA(sub.invoiceAmount)}</span></div>
+      <div class="decl">
+        <p style="font-weight:bold;margin-bottom:5px">Declaration</p>
+        <p>Signed: <strong>${sub.signatureName || "—"}</strong></p>
+        <p>Date: ${fmtD(sub.signatureDate)}</p>
+        ${sub.status === "approved" && sub.approvedAt ? `<p style="margin-top:5px;color:#065f46">✓ Approved: ${new Date(sub.approvedAt).toLocaleDateString("en-GB")}</p>` : ""}
+      </div>
+    </body></html>`;
+
+    const win = window.open("", "_blank", "width=900,height=800");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    } else alert("Pop-up blocked — please allow pop-ups for this site.");
+  };
+
   const totalSubmitted = useMemo(
     () => filtered.reduce((s, sub) => s + (sub.invoiceAmount || 0), 0),
     [filtered],
@@ -388,12 +491,21 @@ export default function InvoiceSubmissions() {
                   {MONTHS[viewing.month]} {viewing.year}
                 </p>
               </div>
-              <button
-                onClick={() => setViewing(null)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg"
-              >
-                ×
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => printSubmission(viewing)}
+                  className="btn-ghost text-xs"
+                  title="Save as PDF"
+                >
+                  ↓ PDF
+                </button>
+                <button
+                  onClick={() => setViewing(null)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg"
+                >
+                  ×
+                </button>
+              </div>
             </div>
 
             <div className="p-4 space-y-5">
