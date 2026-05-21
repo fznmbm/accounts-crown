@@ -129,19 +129,10 @@ export default function StaffPortal() {
   useEffect(() => {
     if (!tokenData) return;
     async function loadStaff() {
-      console.log("=== STAFF PORTAL DIAGNOSTIC ===");
-      console.log("1. tokenData:", tokenData);
-      console.log("2. staff_id being passed:", tokenData.staff_id);
-      console.log("3. token from URL:", token);
-
-      const { data } = await supabase.rpc("get_staff_info_for_portal", {
+      const { data, error } = await supabase.rpc("get_staff_info_for_portal", {
         p_staff_id: tokenData.staff_id,
         p_token: token,
       });
-
-      console.log("4. RPC data returned:", data);
-      console.log("5. RPC error:", error);
-      console.log("6. Setting staffData to:", data?.[0] || null);
 
       setStaffData(data?.[0] || null);
     }
@@ -644,38 +635,38 @@ export default function StaffPortal() {
                 title="Your Details"
                 subtitle="Please confirm your information is correct"
               />
-              <div className="bg-gray-800/50 rounded-xl border border-gray-700 p-4 space-y-3">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-800/50 rounded-xl border border-gray-700 p-4">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
                   <div>
-                    <p className="text-xs text-gray-500 mb-1">Name</p>
+                    <p className="text-xs text-gray-500 mb-0.5">Name</p>
                     <p className="text-sm font-medium text-white">
                       {tokenData.staff_name}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 mb-1">Role</p>
+                    <p className="text-xs text-gray-500 mb-0.5">Role</p>
                     <p className="text-sm font-medium text-white">
                       {staffData ? formatRole(staffData.staff_type) : "—"}
                     </p>
                   </div>
+                  {staffData?.phone && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-0.5">Phone</p>
+                      <p className="text-sm font-medium text-white">
+                        {staffData.phone}
+                      </p>
+                    </div>
+                  )}
+                  {staffData?.address && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-0.5">Address</p>
+                      <p className="text-sm font-medium text-white">
+                        {staffData.address}
+                      </p>
+                    </div>
+                  )}
                 </div>
-                {staffData?.phone && (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Phone</p>
-                    <p className="text-sm font-medium text-white">
-                      {staffData.phone}
-                    </p>
-                  </div>
-                )}
-                {staffData?.address && (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Address</p>
-                    <p className="text-sm font-medium text-white whitespace-pre-line">
-                      {staffData.address}
-                    </p>
-                  </div>
-                )}
-                <p className="text-xs text-gray-500 border-t border-gray-700 pt-3 mt-1">
+                <p className="text-xs text-gray-500 border-t border-gray-700 pt-2 mt-3">
                   If any details are incorrect, please contact your manager
                   before submitting.
                 </p>
