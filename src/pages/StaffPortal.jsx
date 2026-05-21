@@ -85,6 +85,14 @@ export default function StaffPortal() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [ownerId, setOwnerId] = useState(null);
+  const [staffData, setStaffData] = useState(null);
+
+  const formatRole = (type) => {
+    if (type === "driver") return "Driver";
+    if (type === "pa") return "Personal Assistant";
+    if (type === "driver_pa") return "Driver / PA";
+    return type || "—";
+  };
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [month, setMonth] = useState(currentMonth());
@@ -116,6 +124,20 @@ export default function StaffPortal() {
   useEffect(() => {
     getOwnerUserId().then(setOwnerId);
   }, []);
+
+  // ── Fetch staff details for Your Details section ──────────────────────────
+  useEffect(() => {
+    if (!tokenData) return;
+    async function loadStaff() {
+      const { data } = await supabase
+        .from("staff")
+        .select("type, phone, address")
+        .eq("id", tokenData.staff_id)
+        .maybeSingle();
+      setStaffData(data || null);
+    }
+    loadStaff();
+  }, [tokenData]);
 
   // ── Load token ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -621,8 +643,30 @@ export default function StaffPortal() {
                       {tokenData.staff_name}
                     </p>
                   </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Role</p>
+                    <p className="text-sm font-medium text-white">
+                      {staffData ? formatRole(staffData.type) : "—"}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
+                {staffData?.phone && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Phone</p>
+                    <p className="text-sm font-medium text-white">
+                      {staffData.phone}
+                    </p>
+                  </div>
+                )}
+                {staffData?.address && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Address</p>
+                    <p className="text-sm font-medium text-white whitespace-pre-line">
+                      {staffData.address}
+                    </p>
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 border-t border-gray-700 pt-3 mt-1">
                   If any details are incorrect, please contact your manager
                   before submitting.
                 </p>
