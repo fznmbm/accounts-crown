@@ -129,10 +129,20 @@ export default function StaffPortal() {
   useEffect(() => {
     if (!tokenData) return;
     async function loadStaff() {
+      console.log("=== STAFF PORTAL DIAGNOSTIC ===");
+      console.log("1. tokenData:", tokenData);
+      console.log("2. staff_id being passed:", tokenData.staff_id);
+      console.log("3. token from URL:", token);
+
       const { data } = await supabase.rpc("get_staff_info_for_portal", {
         p_staff_id: tokenData.staff_id,
         p_token: token,
       });
+
+      console.log("4. RPC data returned:", data);
+      console.log("5. RPC error:", error);
+      console.log("6. Setting staffData to:", data?.[0] || null);
+
       setStaffData(data?.[0] || null);
     }
     loadStaff();
