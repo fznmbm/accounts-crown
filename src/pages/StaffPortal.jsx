@@ -129,12 +129,11 @@ export default function StaffPortal() {
   useEffect(() => {
     if (!tokenData) return;
     async function loadStaff() {
-      const { data } = await supabase
-        .from("staff")
-        .select("type, phone, address")
-        .eq("id", tokenData.staff_id)
-        .maybeSingle();
-      setStaffData(data || null);
+      const { data } = await supabase.rpc("get_staff_info_for_portal", {
+        p_staff_id: tokenData.staff_id,
+        p_token: token,
+      });
+      setStaffData(data?.[0] || null);
     }
     loadStaff();
   }, [tokenData]);
@@ -646,7 +645,7 @@ export default function StaffPortal() {
                   <div>
                     <p className="text-xs text-gray-500 mb-1">Role</p>
                     <p className="text-sm font-medium text-white">
-                      {staffData ? formatRole(staffData.type) : "—"}
+                      {staffData ? formatRole(staffData.staff_type) : "—"}
                     </p>
                   </div>
                 </div>
