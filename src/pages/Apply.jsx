@@ -492,7 +492,7 @@ export default function Apply() {
             I declare that the information provided in this application is true
             and complete to the best of my knowledge. I understand that any
             false statements or omissions may result in rejection of my
-            application or dismissal if employed. I authorize{" "}
+            application or dismissal if employed. I authorise{" "}
             {CONFIG.companyName} to verify all information provided and conduct
             relevant background checks.
           </div>

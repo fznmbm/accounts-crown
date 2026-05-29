@@ -34,8 +34,14 @@ function fmtDate(dateStr) {
 }
 
 export default function InvoiceSubmissions() {
-  const { submissions, setSubmissions, payments, setPayments, staff } =
-    useApp();
+  const {
+    submissions,
+    setSubmissions,
+    payments,
+    setPayments,
+    staff,
+    settings,
+  } = useApp();
 
   const [monthF, setMonthF] = useState(() => {
     const s = localStorage.getItem("sub_month");
@@ -259,8 +265,9 @@ export default function InvoiceSubmissions() {
       </div>
       ${routeRows}${coverRows}
       <div class="total"><span>Total Claimed</span><span class="green">${fmtA(sub.invoiceAmount)}</span></div>
-      <div class="decl">
-        <p style="font-weight:bold;margin-bottom:5px">Declaration</p>
+  <div class="decl">
+        <p style="font-weight:bold;margin-bottom:8px">Declaration</p>
+        <p style="font-size:9pt;color:#333;font-style:italic;padding:8px 10px;background:#fff;border-left:3px solid #ccc;border-radius:0 4px 4px 0;margin-bottom:10px">I confirm that the work I have done for ${settings?.companyName || "the company"} is self employment work/job and confirm that I am responsible to pay my own tax and N.I contribution.</p>
         <p>Signed: <strong>${sub.signatureName || "—"}</strong></p>
         <p>Date: ${fmtD(sub.signatureDate)}</p>
         ${sub.status === "approved" && sub.approvedAt ? `<p style="margin-top:5px;color:#065f46">✓ Approved: ${new Date(sub.approvedAt).toLocaleDateString("en-GB")}</p>` : ""}

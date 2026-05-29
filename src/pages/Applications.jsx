@@ -15,7 +15,7 @@ const STATUS_STYLE = {
 };
 
 export default function Applications() {
-  const { applications, setApplications, staff, setStaff } = useApp();
+  const { applications, setApplications, staff, setStaff, settings } = useApp();
 
   const [filter, setFilter] = useState("pending");
   const [viewing, setViewing] = useState(null);
@@ -214,12 +214,16 @@ export default function Applications() {
             : ""),
       )}
       ${refs}
-      ${section(
-        "Declaration",
-        row("Agreed", app.declarationAgreed ? "Yes" : "No") +
-          row("Signed by", app.declarationName) +
-          row("Date", fmtD2(app.declarationDate)),
-      )}
+${section(
+  "Declaration",
+  `<p style="font-size:9pt;color:#333;font-style:italic;padding:8px 10px;background:#f9f9f9;border-left:3px solid #ccc;border-radius:0 4px 4px 0;margin-bottom:8px">I declare that the information provided in this application is true and complete to the best of my knowledge. I understand that any false statements or omissions may result in rejection of my application or dismissal if employed. I authorize ${settings?.companyName || "the company"} to verify all information provided and conduct relevant background checks.</p>` +
+    row(
+      "Agreed",
+      app.declarationAgreed ? "✓ Yes — I agree to the above declaration" : "No",
+    ) +
+    row("Signed by", app.declarationName) +
+    row("Date", fmtD2(app.declarationDate)),
+)}
       ${app.adminNotes ? section("Admin Notes", `<p style="font-size:9pt;color:#555;font-style:italic">${app.adminNotes}</p>`) : ""}
     </body></html>`;
 
