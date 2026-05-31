@@ -728,7 +728,10 @@ export default function StaffPortal() {
                               {weekDays.map((day) => {
                                 const val = route.dayEntries[day.date] || "";
                                 return (
-                                  <div key={day.date} className="space-y-1">
+                                  <div
+                                    key={day.date}
+                                    className="space-y-1 min-w-0"
+                                  >
                                     <p className="text-[10px] text-gray-400 text-center">
                                       {day.label
                                         .split(" ")
