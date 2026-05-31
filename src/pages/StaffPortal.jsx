@@ -335,7 +335,7 @@ export default function StaffPortal() {
         //user_id: CONFIG.ownerUserId,
         user_id: ownerId,
         staff_id: tokenData.staff_id,
-        staff_name: tokenData.staff_name,
+        staff_name: staffData?.name || tokenData.staff_name,
         month,
         year,
         route_entries: routePayload,
@@ -404,9 +404,10 @@ export default function StaffPortal() {
           <div className="text-5xl">✅</div>
           <h1 className="text-2xl font-bold text-white">Invoice Submitted</h1>
           <p className="text-gray-400">
-            Thank you {tokenData.staff_name}. Your invoice for {MONTHS[month]}{" "}
-            {year} has been submitted to {CONFIG.companyName}. You will be
-            contacted once it has been reviewed.
+            Thank you {staffData?.name || tokenData.staff_name}. Your invoice
+            for {MONTHS[month]} {year} has been submitted to{" "}
+            {CONFIG.companyName}. You will be contacted once it has been
+            reviewed.
           </p>
           <p className="text-sm text-gray-500">You can close this window.</p>
         </div>
@@ -424,7 +425,7 @@ export default function StaffPortal() {
               Review Your Invoice
             </h1>
             <p className="text-gray-400 text-sm mt-1">
-              {MONTHS[month]} {year} — {tokenData.staff_name}
+              {MONTHS[month]} {year} — {staffData?.name || tokenData.staff_name}
             </p>
           </div>
 
@@ -640,7 +641,7 @@ export default function StaffPortal() {
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Name</p>
                     <p className="text-sm font-medium text-white">
-                      {tokenData.staff_name}
+                      {staffData?.name || tokenData.staff_name}
                     </p>
                   </div>
                   <div>

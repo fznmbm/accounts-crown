@@ -1071,6 +1071,26 @@ export function AppProvider({ children }) {
   const setStaff = async (data, audit) => {
     setRawStaff(data);
     await syncTable("staff", data, staffToDb, effectiveUserId);
+
+    // Keep portal token staff names in sync with staff name changes
+    const needsUpdate = portalTokens.some((token) => {
+      const match = data.find((s) => s.id === token.staffId);
+      return match && match.name !== token.staffName;
+    });
+    if (needsUpdate) {
+      const updatedTokens = portalTokens.map((token) => {
+        const match = data.find((s) => s.id === token.staffId);
+        return match ? { ...token, staffName: match.name } : token;
+      });
+      setRawPortalTokens(updatedTokens);
+      await syncTable(
+        "staff_portal_tokens",
+        updatedTokens,
+        portalTokenToDb,
+        effectiveUserId,
+      );
+    }
+
     if (audit)
       await addAuditEntry(
         audit.action,
