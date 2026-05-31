@@ -56,9 +56,11 @@ function fmt(n) {
 
 // ── Input styles ──────────────────────────────────────────────────────────────
 const inp =
-  "w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-500 text-base focus:outline-none focus:ring-2 focus:ring-blue-500";
 const inpSm =
-  "px-2 py-1.5 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full";
+  "px-2 py-1.5 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-500 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 w-full";
+const inpGrid =
+  "px-2 py-1.5 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-500 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 w-full";
 
 // ── Section header ────────────────────────────────────────────────────────────
 function SectionTitle({ step, title, subtitle }) {
