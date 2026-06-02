@@ -46,7 +46,7 @@ function exportMonthlyPL(monthly, year) {
     m.vatColl.toFixed(2),
     m.staffCost.toFixed(2),
     m.profit.toFixed(2),
-    m.received > 0 ? ((m.profit / m.received) * 100).toFixed(1) + "%" : "",
+    m.margin !== null ? m.margin.toFixed(1) + "%" : "",
   ]);
   downloadCSV(`pl-${year}.csv`, [header, ...rows]);
 }
@@ -163,8 +163,9 @@ export default function Reports() {
     // Use allocations for staff cost — reflects actual cost earned that month
     // not distorted by when payments were physically transferred
     const staffCost = allocs.reduce((s, a) => s + getAllocTotalCost(a), 0);
-    const profit = received / (1 + vatRate / 100) - staffCost;
-    const margin = received > 0 ? (profit / received) * 100 : null;
+    const netRec = received / (1 + vatRate / 100);
+    const profit = netRec - staffCost;
+    const margin = netRec > 0 ? (profit / netRec) * 100 : null;
     return {
       i,
       invoiced,
@@ -196,7 +197,9 @@ export default function Reports() {
     },
   );
   const totMargin =
-    totals.received > 0 ? (totals.profit / totals.received) * 100 : null;
+    totals.received > 0
+      ? (totals.profit / (totals.received / (1 + vatRate / 100))) * 100
+      : null;
 
   // Route P&L — uses allocations for accurate staff cost per route
 
