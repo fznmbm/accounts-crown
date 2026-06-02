@@ -579,41 +579,100 @@ export default function InvoiceSubmissions() {
                     </span>
                   </p>
                   <div className="space-y-1">
-                    {r.days
-                      ?.sort((a, b) => a.date.localeCompare(b.date))
-                      .map((d) => (
-                        <div
-                          key={d.date}
-                          className="flex justify-between text-xs text-gray-600 dark:text-gray-400"
-                        >
-                          <span>
-                            {new Date(d.date).toLocaleDateString("en-GB", {
-                              weekday: "short",
-                              day: "numeric",
-                              month: "short",
-                            })}
-                          </span>
-                          <span className="font-mono">{fmt(d.amount)}</span>
-                        </div>
-                      ))}
-                    {r.weekendDays
-                      ?.filter((d) => d.date)
-                      .map((d, j) => (
-                        <div
-                          key={j}
-                          className="flex justify-between text-xs text-gray-600 dark:text-gray-400"
-                        >
-                          <span>
-                            {new Date(d.date).toLocaleDateString("en-GB", {
-                              weekday: "short",
-                              day: "numeric",
-                              month: "short",
-                            })}{" "}
-                            <span className="text-amber-500">(wknd)</span>
-                          </span>
-                          <span className="font-mono">{fmt(d.amount)}</span>
-                        </div>
-                      ))}
+                    {(() => {
+                      const workedMap = {};
+                      (r.days || []).forEach((d) => {
+                        workedMap[d.date] = d.amount;
+                      });
+                      const weekendMap = {};
+                      (r.weekendDays || [])
+                        .filter((d) => d.date)
+                        .forEach((d) => {
+                          weekendMap[d.date] = d.amount;
+                        });
+                      const start = viewing.periodFrom
+                        ? new Date(viewing.periodFrom.replace(/-/g, "/"))
+                        : null;
+                      const end = viewing.periodTo
+                        ? new Date(viewing.periodTo.replace(/-/g, "/"))
+                        : null;
+                      if (!start || !end) {
+                        return (r.days || [])
+                          .sort((a, b) => a.date.localeCompare(b.date))
+                          .map((d) => (
+                            <div
+                              key={d.date}
+                              className="flex justify-between text-xs text-gray-600 dark:text-gray-400"
+                            >
+                              <span>
+                                {new Date(
+                                  d.date.replace(/-/g, "/"),
+                                ).toLocaleDateString("en-GB", {
+                                  weekday: "short",
+                                  day: "numeric",
+                                  month: "short",
+                                })}
+                              </span>
+                              <span className="font-mono">{fmt(d.amount)}</span>
+                            </div>
+                          ));
+                      }
+                      const rows = [];
+                      const cur = new Date(start);
+                      while (cur <= end) {
+                        const dow = cur.getDay();
+                        if (dow >= 1 && dow <= 5) {
+                          rows.push(
+                            `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`,
+                          );
+                        }
+                        cur.setDate(cur.getDate() + 1);
+                      }
+                      return (
+                        <>
+                          {rows.map((key) => {
+                            const amount = workedMap[key];
+                            return (
+                              <div
+                                key={key}
+                                className={`flex justify-between text-xs ${amount ? "text-gray-600 dark:text-gray-400" : "text-gray-300 dark:text-gray-600"}`}
+                              >
+                                <span>
+                                  {new Date(
+                                    key.replace(/-/g, "/"),
+                                  ).toLocaleDateString("en-GB", {
+                                    weekday: "short",
+                                    day: "numeric",
+                                    month: "short",
+                                  })}
+                                </span>
+                                <span className={amount ? "font-mono" : ""}>
+                                  {amount ? fmt(amount) : "—"}
+                                </span>
+                              </div>
+                            );
+                          })}
+                          {Object.entries(weekendMap).map(([key, amount]) => (
+                            <div
+                              key={`wknd_${key}`}
+                              className="flex justify-between text-xs text-gray-600 dark:text-gray-400"
+                            >
+                              <span>
+                                {new Date(
+                                  key.replace(/-/g, "/"),
+                                ).toLocaleDateString("en-GB", {
+                                  weekday: "short",
+                                  day: "numeric",
+                                  month: "short",
+                                })}{" "}
+                                <span className="text-amber-500">(wknd)</span>
+                              </span>
+                              <span className="font-mono">{fmt(amount)}</span>
+                            </div>
+                          ))}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}
