@@ -779,11 +779,46 @@ export default function Attendance() {
           rateNote = `Rate change ${new Date(datedBand.effectiveFrom).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}: ${daysBefore}d × £${regularRate} + ${daysAfter}d × £${newPayRate}`;
         }
       } else if (undatedReplacementBand) {
-        // Day-of-week band — can't auto-split without day metadata,
-        // calculate at base rate and flag for manual review
-        regularAmount = Math.round(regular.days * regularRate * 100) / 100;
-        hasRateSplit = true;
-        rateNote = `Day-specific rate band "${undatedReplacementBand.description}" (£${undatedReplacementBand.driverRate}/day for some days) — review and adjust owed amount.`;
+        const bandRate =
+          parseFloat(undatedReplacementBand.driverRate) || regularRate;
+        if (undatedReplacementBand.dayOfWeek?.length > 0 && regular.driverId) {
+          // Auto-calculate pay by checking each attendance record's day of week
+          let payTotal = 0;
+          let stdDays = 0;
+          let bandDaysCount = 0;
+          opRecords.forEach((a) => {
+            const dow = new Date(a.date).getDay();
+            const isBandDay = undatedReplacementBand.dayOfWeek.includes(dow);
+            const rate = isBandDay ? bandRate : regularRate;
+            if (a.isSplitRun) {
+              if (a.amDriverId === regular.driverId) {
+                payTotal += 0.5 * rate;
+                if (isBandDay) bandDaysCount += 0.5;
+                else stdDays += 0.5;
+              }
+              if (a.pmDriverId === regular.driverId) {
+                payTotal += 0.5 * rate;
+                if (isBandDay) bandDaysCount += 0.5;
+                else stdDays += 0.5;
+              }
+            } else if (a.driverId === regular.driverId) {
+              const d = a.daysValue ?? 1;
+              payTotal += d * rate;
+              if (isBandDay) bandDaysCount += d;
+              else stdDays += d;
+            }
+          });
+          regularAmount = Math.round(payTotal * 100) / 100;
+          if (bandDaysCount > 0) {
+            hasRateSplit = true;
+            rateNote = `Rate split (${undatedReplacementBand.description}): ${stdDays}d × £${regularRate} + ${bandDaysCount}d × £${bandRate} = £${regularAmount}`;
+          }
+        } else {
+          // dayOfWeek not set on band — flag for manual review
+          regularAmount = Math.round(regular.days * regularRate * 100) / 100;
+          hasRateSplit = true;
+          rateNote = `Day-specific rate band "${undatedReplacementBand.description}" (£${bandRate}/day for some days) — review and adjust owed amount.`;
+        }
       } else {
         regularAmount = Math.round(regular.days * regularRate * 100) / 100;
       }

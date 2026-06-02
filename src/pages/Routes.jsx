@@ -676,6 +676,9 @@ export default function Routes() {
                                     ? {
                                         ...b,
                                         effectiveFrom: e.target.value || null,
+                                        dayOfWeek: e.target.value
+                                          ? []
+                                          : b.dayOfWeek,
                                       }
                                     : b,
                                 ),
@@ -687,6 +690,75 @@ export default function Routes() {
                               ? "Rate applies from this date onwards"
                               : "Leave blank — rate applies the whole month"}
                           </span>
+                        </div>
+                      )}
+                      {!band.isAdditive && !band.effectiveFrom && (
+                        <div className="space-y-1.5">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            Applies on days{" "}
+                            <span className="text-gray-400 dark:text-gray-500 font-normal">
+                              (select which days use this rate — leave blank if
+                              all days)
+                            </span>
+                          </p>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {[
+                              { label: "Mon", value: 1 },
+                              { label: "Tue", value: 2 },
+                              { label: "Wed", value: 3 },
+                              { label: "Thu", value: 4 },
+                              { label: "Fri", value: 5 },
+                            ].map((d) => {
+                              const active = (band.dayOfWeek || []).includes(
+                                d.value,
+                              );
+                              return (
+                                <button
+                                  key={d.value}
+                                  type="button"
+                                  onClick={() =>
+                                    setForm((p) => ({
+                                      ...p,
+                                      rateBands: p.rateBands.map((b, j) =>
+                                        j === i
+                                          ? {
+                                              ...b,
+                                              dayOfWeek: active
+                                                ? (b.dayOfWeek || []).filter(
+                                                    (x) => x !== d.value,
+                                                  )
+                                                : [
+                                                    ...(b.dayOfWeek || []),
+                                                    d.value,
+                                                  ].sort(),
+                                            }
+                                          : b,
+                                      ),
+                                    }))
+                                  }
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                                    active
+                                      ? "bg-blue-600 text-white"
+                                      : "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600"
+                                  }`}
+                                >
+                                  {d.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {(band.dayOfWeek || []).length > 0 && (
+                            <p className="text-xs text-blue-600 dark:text-blue-400">
+                              ✓ System will auto-calculate pay split for{" "}
+                              {(band.dayOfWeek || [])
+                                .map(
+                                  (d) =>
+                                    ["", "Mon", "Tue", "Wed", "Thu", "Fri"][d],
+                                )
+                                .join(" & ")}{" "}
+                              days
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>

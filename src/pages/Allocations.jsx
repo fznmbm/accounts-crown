@@ -802,29 +802,71 @@ export default function Allocations() {
                 </FormField>
               </FormGrid>
               {form.regularDays && form.regularRate && (
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                  Regular owed:{" "}
-                  <span className="font-semibold text-gray-900 dark:text-gray-100">
-                    {fmt(
-                      form.regularAmount &&
-                        Math.abs(
-                          form.regularAmount -
+                <div className="mt-2 space-y-2">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Regular owed:{" "}
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">
+                      {fmt(
+                        form.regularAmount &&
+                          Math.abs(
+                            form.regularAmount -
+                              Number(form.regularDays) *
+                                Number(form.regularRate),
+                          ) > 0.01
+                          ? form.regularAmount
+                          : Number(form.regularDays) * Number(form.regularRate),
+                      )}
+                    </span>
+                    {form.regularAmount &&
+                      Math.abs(
+                        form.regularAmount -
+                          Number(form.regularDays) * Number(form.regularRate),
+                      ) > 0.01 && (
+                        <span className="text-xs text-blue-500 dark:text-blue-400 ml-2">
+                          † rate split applied
+                        </span>
+                      )}
+                  </p>
+                  {form.hasRateSplit && (
+                    <div className="p-3 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg space-y-2">
+                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                        ⚠ Day-specific rate split — enter correct total owed
+                      </p>
+                      <p className="text-xs text-amber-600 dark:text-amber-500">
+                        e.g. 12d × £90 + 8d × £100 = £1,880.00
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <label className="text-xs text-gray-600 dark:text-gray-400 flex-shrink-0">
+                          Actual owed (£)
+                        </label>
+                        <input
+                          className="input w-36"
+                          type="number"
+                          step="0.01"
+                          value={
+                            form.regularAmount &&
+                            Math.abs(
+                              form.regularAmount -
+                                Number(form.regularDays) *
+                                  Number(form.regularRate),
+                            ) > 0.01
+                              ? form.regularAmount
+                              : ""
+                          }
+                          onChange={(e) =>
+                            setForm((p) => ({
+                              ...p,
+                              regularAmount: parseFloat(e.target.value) || 0,
+                            }))
+                          }
+                          placeholder={fmt(
                             Number(form.regularDays) * Number(form.regularRate),
-                        ) > 0.01
-                        ? form.regularAmount
-                        : Number(form.regularDays) * Number(form.regularRate),
-                    )}
-                  </span>
-                  {form.regularAmount &&
-                    Math.abs(
-                      form.regularAmount -
-                        Number(form.regularDays) * Number(form.regularRate),
-                    ) > 0.01 && (
-                      <span className="text-xs text-blue-500 dark:text-blue-400 ml-2">
-                        † rate split — see notes
-                      </span>
-                    )}
-                </p>
+                          ).replace("£", "")}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
               {Number(form.regularDays) < Number(form.totalDays) &&
                 Number(form.totalDays) > 0 && (

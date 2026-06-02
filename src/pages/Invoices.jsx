@@ -156,11 +156,42 @@ export default function Invoices() {
               ...(bandDays[r.id] || {}),
               [datedBand.id]: String(from),
             };
-        } else if (!hasUndatedReplacement) {
+        } else if (hasUndatedReplacement) {
+          const undatedBand = (r.rateBands || []).find(
+            (b) => !b.isAdditive && !b.effectiveFrom,
+          );
+          if (undatedBand?.dayOfWeek?.length > 0) {
+            // Auto-split attendance by day of week using band's dayOfWeek
+            const attRecords = attendance.filter(
+              (a) =>
+                a.routeId === r.id &&
+                a.month === month &&
+                a.year === year &&
+                a.status !== "no_run",
+            );
+            let bandCount = 0;
+            let stdCount = 0;
+            attRecords.forEach((a) => {
+              const dow = new Date(a.date).getDay();
+              const d = a.daysValue ?? 1;
+              if (undatedBand.dayOfWeek.includes(dow)) {
+                bandCount += d;
+              } else {
+                stdCount += d;
+              }
+            });
+            if (stdCount > 0) days[r.id] = String(stdCount);
+            if (bandCount > 0)
+              bandDays[r.id] = {
+                ...(bandDays[r.id] || {}),
+                [undatedBand.id]: String(bandCount),
+              };
+          }
+          // dayOfWeek not set — leave empty for manual entry
+        } else {
           const total = getAttendanceDays(r.id, month, year);
           if (total > 0) days[r.id] = String(total);
         }
-        // Undated replacement bands (day-of-week): both left empty — user splits manually
       });
     return { days, bandDays };
   };
