@@ -190,26 +190,62 @@ export default function InvoiceSubmissions() {
         : "—";
 
     const routeRows = (sub.routeEntries || [])
-      .map(
-        (r, i) => `
+      .map((r, i) => {
+        const workedMap = {};
+        (r.days || []).forEach((d) => {
+          workedMap[d.date] = d.amount;
+        });
+        const weekendMap = {};
+        (r.weekendDays || [])
+          .filter((d) => d.date)
+          .forEach((d) => {
+            weekendMap[d.date] = d.amount;
+          });
+        const start = sub.periodFrom
+          ? new Date(sub.periodFrom.replace(/-/g, "/"))
+          : null;
+        const end = sub.periodTo
+          ? new Date(sub.periodTo.replace(/-/g, "/"))
+          : null;
+        let dayRows = "";
+        if (start && end) {
+          const cur = new Date(start);
+          while (cur <= end) {
+            const dow = cur.getDay();
+            if (dow >= 1 && dow <= 5) {
+              const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+              const amount = workedMap[key];
+              const label = new Date(key.replace(/-/g, "/")).toLocaleDateString(
+                "en-GB",
+                { weekday: "short", day: "numeric", month: "short" },
+              );
+              dayRows += amount
+                ? `<div class="row"><span>${label}</span><span>${fmtA(amount)}</span></div>`
+                : `<div class="row" style="color:#ccc"><span>${label}</span><span>—</span></div>`;
+            }
+            cur.setDate(cur.getDate() + 1);
+          }
+        } else {
+          dayRows = [...(r.days || [])]
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .map(
+              (d) =>
+                `<div class="row"><span>${new Date(d.date.replace(/-/g, "/")).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</span><span>${fmtA(d.amount)}</span></div>`,
+            )
+            .join("");
+        }
+        const weekendRows = Object.entries(weekendMap)
+          .map(
+            ([key, amount]) =>
+              `<div class="row"><span>${new Date(key.replace(/-/g, "/")).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} (wknd)</span><span>${fmtA(amount)}</span></div>`,
+          )
+          .join("");
+        return `
       <div class="section">
         <div class="sec-hdr">Route ${i + 1}: ${r.routeName}<span class="green">${fmtA(r.total)}</span></div>
-        ${[...(r.days || [])]
-          .sort((a, b) => a.date.localeCompare(b.date))
-          .map(
-            (d) => `
-          <div class="row"><span>${new Date(d.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</span><span>${fmtA(d.amount)}</span></div>`,
-          )
-          .join("")}
-        ${(r.weekendDays || [])
-          .filter((d) => d.date)
-          .map(
-            (d) => `
-          <div class="row"><span>${new Date(d.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} (weekend)</span><span>${fmtA(d.amount)}</span></div>`,
-          )
-          .join("")}
-      </div>`,
-      )
+        ${dayRows}${weekendRows}
+      </div>`;
+      })
       .join("");
 
     const coverRows =
