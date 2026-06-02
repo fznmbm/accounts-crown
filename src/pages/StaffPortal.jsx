@@ -446,45 +446,96 @@ export default function StaffPortal() {
                 </p>
               </div>
               <div className="p-4 space-y-1">
-                {Object.entries(r.dayEntries)
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([date, amount]) => (
-                    <div
-                      key={date}
-                      className="flex justify-between text-xs text-gray-300"
-                    >
-                      <span>
-                        {new Date(date).toLocaleDateString("en-GB", {
-                          weekday: "short",
-                          day: "numeric",
-                          month: "short",
-                        })}
-                      </span>
-                      <span className="font-mono">
-                        {fmt(parseFloat(amount))}
-                      </span>
-                    </div>
-                  ))}
-                {r.weekendEntries
-                  .filter((e) => e.date && e.amount)
-                  .map((e) => (
-                    <div
-                      key={e.id}
-                      className="flex justify-between text-xs text-gray-300"
-                    >
-                      <span>
-                        {new Date(e.date).toLocaleDateString("en-GB", {
-                          weekday: "short",
-                          day: "numeric",
-                          month: "short",
-                        })}{" "}
-                        (weekend)
-                      </span>
-                      <span className="font-mono">
-                        {fmt(parseFloat(e.amount))}
-                      </span>
-                    </div>
-                  ))}
+                {(() => {
+                  const start = periodFrom
+                    ? new Date(periodFrom.replace(/-/g, "/"))
+                    : null;
+                  const end = periodTo
+                    ? new Date(periodTo.replace(/-/g, "/"))
+                    : null;
+                  if (!start || !end) {
+                    return Object.entries(r.dayEntries)
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([date, amount]) => (
+                        <div
+                          key={date}
+                          className="flex justify-between text-xs text-gray-300"
+                        >
+                          <span>
+                            {new Date(
+                              date.replace(/-/g, "/"),
+                            ).toLocaleDateString("en-GB", {
+                              weekday: "short",
+                              day: "numeric",
+                              month: "short",
+                            })}
+                          </span>
+                          <span className="font-mono">
+                            {fmt(parseFloat(amount))}
+                          </span>
+                        </div>
+                      ));
+                  }
+                  const rows = [];
+                  const cur = new Date(start);
+                  while (cur <= end) {
+                    const dow = cur.getDay();
+                    if (dow >= 1 && dow <= 5) {
+                      rows.push(
+                        `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`,
+                      );
+                    }
+                    cur.setDate(cur.getDate() + 1);
+                  }
+                  return (
+                    <>
+                      {rows.map((key) => {
+                        const amount = r.dayEntries[key];
+                        return (
+                          <div
+                            key={key}
+                            className={`flex justify-between text-xs ${amount ? "text-gray-300" : "text-gray-600"}`}
+                          >
+                            <span>
+                              {new Date(
+                                key.replace(/-/g, "/"),
+                              ).toLocaleDateString("en-GB", {
+                                weekday: "short",
+                                day: "numeric",
+                                month: "short",
+                              })}
+                            </span>
+                            <span className={amount ? "font-mono" : ""}>
+                              {amount ? fmt(parseFloat(amount)) : "—"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {r.weekendEntries
+                        .filter((e) => e.date && e.amount)
+                        .map((e) => (
+                          <div
+                            key={e.id}
+                            className="flex justify-between text-xs text-gray-300"
+                          >
+                            <span>
+                              {new Date(
+                                e.date.replace(/-/g, "/"),
+                              ).toLocaleDateString("en-GB", {
+                                weekday: "short",
+                                day: "numeric",
+                                month: "short",
+                              })}{" "}
+                              (weekend)
+                            </span>
+                            <span className="font-mono">
+                              {fmt(parseFloat(e.amount))}
+                            </span>
+                          </div>
+                        ))}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           ))}
