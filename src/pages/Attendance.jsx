@@ -737,6 +737,10 @@ export default function Attendance() {
       const datedBand = (route.rateBands || []).find(
         (b) => !b.isAdditive && b.effectiveFrom,
       );
+      // Check for day-of-week rate band (no effectiveFrom — e.g. "Mon & Fri £100")
+      const undatedReplacementBand = (route.rateBands || []).find(
+        (b) => !b.isAdditive && !b.effectiveFrom,
+      );
       const newPayRate = datedBand
         ? parseFloat(datedBand.driverRate) || regularRate
         : regularRate;
@@ -774,6 +778,12 @@ export default function Attendance() {
           hasRateSplit = true;
           rateNote = `Rate change ${new Date(datedBand.effectiveFrom).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}: ${daysBefore}d × £${regularRate} + ${daysAfter}d × £${newPayRate}`;
         }
+      } else if (undatedReplacementBand) {
+        // Day-of-week band — can't auto-split without day metadata,
+        // calculate at base rate and flag for manual review
+        regularAmount = Math.round(regular.days * regularRate * 100) / 100;
+        hasRateSplit = true;
+        rateNote = `Day-specific rate band "${undatedReplacementBand.description}" (£${undatedReplacementBand.driverRate}/day for some days) — review and adjust owed amount.`;
       } else {
         regularAmount = Math.round(regular.days * regularRate * 100) / 100;
       }

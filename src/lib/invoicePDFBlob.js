@@ -55,8 +55,9 @@ function buildLines({ route, bands, notes, standardDays, daysWorked }) {
         ).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
       : `Route ${rNum} ${route.name} — Standard run${notes ? ` — ${notes}` : ""}`;
 
+    const hasReplacementBand = route.rateBands.some((b) => !b.isAdditive);
     lines = [
-      ...((allAdditive || hasDatedReplacement) && standardDays > 0
+      ...((allAdditive || hasReplacementBand) && standardDays > 0
         ? [
             {
               description: stdLabel,

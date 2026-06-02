@@ -134,6 +134,9 @@ export default function Invoices() {
         const datedBand = (r.rateBands || []).find(
           (b) => !b.isAdditive && b.effectiveFrom,
         );
+        const hasUndatedReplacement = (r.rateBands || []).some(
+          (b) => !b.isAdditive && !b.effectiveFrom,
+        );
         if (datedBand) {
           const before = getAttendanceDaysBefore(
             r.id,
@@ -153,10 +156,11 @@ export default function Invoices() {
               ...(bandDays[r.id] || {}),
               [datedBand.id]: String(from),
             };
-        } else {
+        } else if (!hasUndatedReplacement) {
           const total = getAttendanceDays(r.id, month, year);
           if (total > 0) days[r.id] = String(total);
         }
+        // Undated replacement bands (day-of-week): both left empty — user splits manually
       });
     return { days, bandDays };
   };
@@ -964,7 +968,8 @@ export default function Invoices() {
                             );
                             return (
                               <div className="space-y-1.5 pt-1">
-                                {(allAdditive || hasDatedReplacement) && (
+                                {(allAdditive ||
+                                  replacementBands.length > 0) && (
                                   <div className="flex items-center gap-3">
                                     <span className="text-xs text-gray-600 dark:text-gray-400 flex-1">
                                       {hasDatedReplacement
@@ -1105,10 +1110,7 @@ export default function Invoices() {
                     const hasDatedReplacement = r.rateBands.some(
                       (b) => !b.isAdditive && b.effectiveFrom,
                     );
-                    const stdDays =
-                      allAdditive || hasDatedReplacement
-                        ? Number(genDays[r.id] || 0)
-                        : 0;
+                    const stdDays = Number(genDays[r.id] || 0);
                     const stdAmount = stdDays * Number(r.dailyRate);
                     // Band amounts
                     const bandAmount = r.rateBands

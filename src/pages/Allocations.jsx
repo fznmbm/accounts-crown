@@ -178,6 +178,10 @@ export default function Allocations() {
     });
     const primaryPA = staff.find((x) => x.id === route?.primaryPAId);
     const additiveBands = (route?.rateBands || []).filter((b) => b.isAdditive);
+    const undatedReplacementBands = (route?.rateBands || []).filter(
+      (b) => !b.isAdditive && !b.effectiveFrom,
+    );
+    const hasUndatedReplacement = undatedReplacementBands.length > 0;
     const primaryDriverId = primaryEntry ? primaryEntry[0] : "";
     const primaryDriverName = primaryEntry
       ? staff.find((x) => x.id === primaryEntry[0])?.name ||
@@ -207,6 +211,10 @@ export default function Allocations() {
       paRate: route?.paPayRate ? String(route.paPayRate) : "",
       paDays: totalDays ? String(totalDays) : "",
       additiveEntries,
+      hasRateSplit: hasUndatedReplacement,
+      notes: hasUndatedReplacement
+        ? `Day-specific rate split: ${undatedReplacementBands.map((b) => `"${b.description}" £${b.driverRate}/day`).join(", ")}. Adjust owed amount manually.`
+        : p.notes,
     }));
   };
 

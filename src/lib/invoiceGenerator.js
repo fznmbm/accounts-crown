@@ -39,7 +39,9 @@ export function generateInvoicePDF({
   const lines = usesBands
     ? [
         // Standard line — additive-only routes OR dated replacement bands
-        ...((allAdditive || hasDatedReplacement) && standardDays > 0
+        ...((allAdditive ||
+          (route.rateBands?.some((b) => !b.isAdditive) ?? false)) &&
+        standardDays > 0
           ? [
               {
                 description: stdLineLabel,
