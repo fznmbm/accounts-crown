@@ -201,39 +201,44 @@ export default function InvoiceSubmissions() {
           .forEach((d) => {
             weekendMap[d.date] = d.amount;
           });
-        const start = sub.periodFrom
-          ? new Date(sub.periodFrom.replace(/-/g, "/"))
-          : null;
-        const end = sub.periodTo
-          ? new Date(sub.periodTo.replace(/-/g, "/"))
-          : null;
-        let dayRows = "";
-        if (start && end) {
-          const cur = new Date(start);
-          while (cur <= end) {
-            const dow = cur.getDay();
-            if (dow >= 1 && dow <= 5) {
-              const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
-              const amount = workedMap[key];
-              const label = new Date(key.replace(/-/g, "/")).toLocaleDateString(
-                "en-GB",
-                { weekday: "short", day: "numeric", month: "short" },
-              );
-              dayRows += amount
-                ? `<div class="row"><span>${label}</span><span>${fmtA(amount)}</span></div>`
-                : `<div class="row" style="color:#ccc"><span>${label}</span><span>—</span></div>`;
-            }
-            cur.setDate(cur.getDate() + 1);
+        // Build full calendar month (Mon-Fri) for the submission's month/year —
+        // NOT the period dates. Period is for the declaration record only and
+        // must never hide entered figures.
+        const rows = [];
+        const cur = new Date(sub.year, sub.month, 1);
+        while (cur.getMonth() === sub.month) {
+          const dow = cur.getDay();
+          if (dow >= 1 && dow <= 5) {
+            rows.push(
+              `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`,
+            );
           }
-        } else {
-          dayRows = [...(r.days || [])]
-            .sort((a, b) => a.date.localeCompare(b.date))
-            .map(
-              (d) =>
-                `<div class="row"><span>${new Date(d.date.replace(/-/g, "/")).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</span><span>${fmtA(d.amount)}</span></div>`,
-            )
-            .join("");
+          cur.setDate(cur.getDate() + 1);
         }
+        let dayRows = rows
+          .map((key) => {
+            const amount = workedMap[key];
+            const label = new Date(key.replace(/-/g, "/")).toLocaleDateString(
+              "en-GB",
+              { weekday: "short", day: "numeric", month: "short" },
+            );
+            return amount
+              ? `<div class="row"><span>${label}</span><span>${fmtA(amount)}</span></div>`
+              : `<div class="row" style="color:#ccc"><span>${label}</span><span>—</span></div>`;
+          })
+          .join("");
+        const extraKeys = Object.keys(workedMap).filter(
+          (k) => !rows.includes(k),
+        );
+        dayRows += extraKeys
+          .map((key) => {
+            const label = new Date(key.replace(/-/g, "/")).toLocaleDateString(
+              "en-GB",
+              { weekday: "short", day: "numeric", month: "short" },
+            );
+            return `<div class="row"><span>${label} (outside month)</span><span>${fmtA(workedMap[key])}</span></div>`;
+          })
+          .join("");
         const weekendRows = Object.entries(weekendMap)
           .map(
             ([key, amount]) =>
@@ -626,36 +631,12 @@ export default function InvoiceSubmissions() {
                         .forEach((d) => {
                           weekendMap[d.date] = d.amount;
                         });
-                      const start = viewing.periodFrom
-                        ? new Date(viewing.periodFrom.replace(/-/g, "/"))
-                        : null;
-                      const end = viewing.periodTo
-                        ? new Date(viewing.periodTo.replace(/-/g, "/"))
-                        : null;
-                      if (!start || !end) {
-                        return (r.days || [])
-                          .sort((a, b) => a.date.localeCompare(b.date))
-                          .map((d) => (
-                            <div
-                              key={d.date}
-                              className="flex justify-between text-xs text-gray-600 dark:text-gray-400"
-                            >
-                              <span>
-                                {new Date(
-                                  d.date.replace(/-/g, "/"),
-                                ).toLocaleDateString("en-GB", {
-                                  weekday: "short",
-                                  day: "numeric",
-                                  month: "short",
-                                })}
-                              </span>
-                              <span className="font-mono">{fmt(d.amount)}</span>
-                            </div>
-                          ));
-                      }
+                      // Build full calendar month (Mon-Fri) for the submission's
+                      // month/year — NOT the period dates. Period is for the
+                      // declaration record only and must never hide entered figures.
                       const rows = [];
-                      const cur = new Date(start);
-                      while (cur <= end) {
+                      const cur = new Date(viewing.year, viewing.month, 1);
+                      while (cur.getMonth() === viewing.month) {
                         const dow = cur.getDay();
                         if (dow >= 1 && dow <= 5) {
                           rows.push(
@@ -664,6 +645,11 @@ export default function InvoiceSubmissions() {
                         }
                         cur.setDate(cur.getDate() + 1);
                       }
+                      // Any worked day not in the generated month grid (shouldn't normally
+                      // happen, but guards against stray/out-of-month data) — always show it
+                      const extraKeys = Object.keys(workedMap).filter(
+                        (k) => !rows.includes(k),
+                      );
                       return (
                         <>
                           {rows.map((key) => {
@@ -688,6 +674,28 @@ export default function InvoiceSubmissions() {
                               </div>
                             );
                           })}
+                          {extraKeys.map((key) => (
+                            <div
+                              key={`extra_${key}`}
+                              className="flex justify-between text-xs text-gray-600 dark:text-gray-400"
+                            >
+                              <span>
+                                {new Date(
+                                  key.replace(/-/g, "/"),
+                                ).toLocaleDateString("en-GB", {
+                                  weekday: "short",
+                                  day: "numeric",
+                                  month: "short",
+                                })}{" "}
+                                <span className="text-amber-500">
+                                  (outside month)
+                                </span>
+                              </span>
+                              <span className="font-mono">
+                                {fmt(workedMap[key])}
+                              </span>
+                            </div>
+                          ))}
                           {Object.entries(weekendMap).map(([key, amount]) => (
                             <div
                               key={`wknd_${key}`}
