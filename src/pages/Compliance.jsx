@@ -92,6 +92,7 @@ const EMPTY_LIC = {
   vehicleLicenceNumber: "",
   vehicleLicenceExpiry: "",
   insuranceExpiry: "",
+  motExpiry: "",
   documents: [],
   notes: "",
 };
@@ -160,6 +161,7 @@ export default function Compliance() {
         getExpiryStatus(l.driverLicenceExpiry).status,
         getExpiryStatus(l.vehicleLicenceExpiry).status,
         getExpiryStatus(l.insuranceExpiry).status,
+        getExpiryStatus(l.motExpiry).status,
       ]);
       map[s.id] = getWorstStatus(statuses);
     });
@@ -199,6 +201,7 @@ export default function Compliance() {
       vehicleLicenceNumber: l.vehicleLicenceNumber || "",
       vehicleLicenceExpiry: l.vehicleLicenceExpiry || "",
       insuranceExpiry: l.insuranceExpiry || "",
+      motExpiry: l.motExpiry || "",
       documents: l.documents || [],
       notes: l.notes || "",
     });
@@ -311,6 +314,7 @@ export default function Compliance() {
         getExpiryStatus(l.driverLicenceExpiry),
         getExpiryStatus(l.vehicleLicenceExpiry),
         getExpiryStatus(l.insuranceExpiry),
+        getExpiryStatus(l.motExpiry),
       ];
       return ss.some((s) => s.status === "expired" || s.status === "critical");
     }).length;
@@ -381,6 +385,7 @@ export default function Compliance() {
                     <th className="th">Vehicle Reg</th>
                     <th className="th">Vehicle Licence</th>
                     <th className="th">Insurance</th>
+                    <th className="th">MOT</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -394,7 +399,7 @@ export default function Compliance() {
                           <td className="td font-medium text-gray-900 dark:text-gray-100">
                             {s.name}
                           </td>
-                          <td className="td" colSpan={5}>
+                          <td className="td" colSpan={6}>
                             <span className="text-xs text-gray-400 dark:text-gray-500 italic">
                               No licence records
                             </span>
@@ -459,6 +464,9 @@ export default function Compliance() {
                           </td>
                           <td className="td">
                             {badge(ins, l.insuranceExpiry)}
+                          </td>
+                          <td className="td">
+                            {badge(getExpiryStatus(l.motExpiry), l.motExpiry)}
                           </td>
                         </tr>
                       );
@@ -736,6 +744,9 @@ export default function Compliance() {
                             date={l.insuranceExpiry}
                             label="Insurance expiry"
                           />
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                          <ExpiryBadge date={l.motExpiry} label="MOT expiry" />
                         </div>
                       </div>
 
@@ -1079,6 +1090,14 @@ export default function Compliance() {
                     type="date"
                     value={licForm.insuranceExpiry}
                     onChange={lf("insuranceExpiry")}
+                  />
+                </FormField>
+                <FormField label="MOT expiry">
+                  <input
+                    className="input"
+                    type="date"
+                    value={licForm.motExpiry}
+                    onChange={lf("motExpiry")}
                   />
                 </FormField>
               </FormGrid>
