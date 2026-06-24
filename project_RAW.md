@@ -9,7 +9,10 @@
 - [vite.config.js](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/vite.config.js)
 - [vercel.json](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/vercel.json)
 - [README.md](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/README.md)
+- [proj_structure](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/proj_structure)
 - [.gitignore](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/.gitignore)
+- [.env demo](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/.env%20demo)
+- [.env Crown Cars](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/.env%20Crown%20Cars)
 
 ## src/
 - [src/App.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/App.jsx)
@@ -19,6 +22,8 @@
 
 ## src/components/
 - [src/components/Badge.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/components/Badge.jsx)
+- [src/components/ConfirmModal.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/components/ConfirmModal.jsx)
+- [src/components/DocumentUploader.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/components/DocumentUploader.jsx)
 - [src/components/DriveFilePicker.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/components/DriveFilePicker.jsx)
 - [src/components/DropZone.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/components/DropZone.jsx)
 - [src/components/EmptyState.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/components/EmptyState.jsx)
@@ -31,12 +36,16 @@
 ## src/context/
 - [src/context/AppContext.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/context/AppContext.jsx)
 - [src/context/AuthContext.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/context/AuthContext.jsx)
+- [src/context/AuthContext.jsx.backup](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/context/AuthContext.jsx.backup)
+- [src/context/ConfirmContext.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/context/ConfirmContext.jsx)
 - [src/context/LicenceContext.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/context/LicenceContext.jsx)
 - [src/context/ThemeContext.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/context/ThemeContext.jsx)
 
 ## src/lib/
+- [src/lib/getOwnerUserId.js](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/lib/getOwnerUserId.js)
 - [src/lib/googleDrive.js](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/lib/googleDrive.js)
 - [src/lib/invoiceGenerator.js](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/lib/invoiceGenerator.js)
+- [src/lib/invoicePDFBlob.js](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/lib/invoicePDFBlob.js)
 - [src/lib/licence.js](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/lib/licence.js)
 - [src/lib/pdfParser.js](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/lib/pdfParser.js)
 - [src/lib/supabase.js](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/lib/supabase.js)
@@ -45,17 +54,25 @@
 ## src/pages/
 - [src/pages/AdminLicences.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/AdminLicences.jsx)
 - [src/pages/Allocations.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Allocations.jsx)
+- [src/pages/Applications.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Applications.jsx)
+- [src/pages/Apply.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Apply.jsx)
 - [src/pages/Attendance.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Attendance.jsx)
 - [src/pages/AuditLog.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/AuditLog.jsx)
 - [src/pages/Children.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Children.jsx)
+- [src/pages/Compliance.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Compliance.jsx)
 - [src/pages/Dashboard.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Dashboard.jsx)
+- [src/pages/ForgotPassword.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/ForgotPassword.jsx)
 - [src/pages/HolidayCalendar.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/HolidayCalendar.jsx)
+- [src/pages/InvoiceSubmissions.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/InvoiceSubmissions.jsx)
 - [src/pages/Invoices.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Invoices.jsx)
 - [src/pages/Login.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Login.jsx)
 - [src/pages/Payments.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Payments.jsx)
 - [src/pages/Remittances.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Remittances.jsx)
 - [src/pages/Reports.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Reports.jsx)
+- [src/pages/ResetPassword.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/ResetPassword.jsx)
 - [src/pages/Routes.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Routes.jsx)
 - [src/pages/Settings.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Settings.jsx)
+- [src/pages/Signup.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Signup.jsx)
 - [src/pages/Staff.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/Staff.jsx)
 - [src/pages/StaffLedger.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/StaffLedger.jsx)
+- [src/pages/StaffPortal.jsx](https://raw.githubusercontent.com/fznmbm/accounts-crown/main/src/pages/StaffPortal.jsx)
