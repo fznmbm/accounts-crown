@@ -36,6 +36,8 @@ export default function Staff() {
     allocations,
     portalTokens,
     setPortalTokens,
+    staffLicences,
+    staffTraining,
   } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -157,6 +159,35 @@ export default function Staff() {
   const totalPaid = (id) =>
     payments.filter((p) => p.staffId === id).reduce((s, p) => s + p.amount, 0);
 
+  const getComplianceStatus = (staffId) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const daysUntil = (dateStr) => {
+      if (!dateStr) return null;
+      const d = new Date(dateStr);
+      d.setHours(0, 0, 0, 0);
+      return Math.floor((d - today) / 86400000);
+    };
+    const lics = staffLicences.filter((l) => l.staffId === staffId);
+    const trns = staffTraining.filter((t) => t.staffId === staffId);
+    const dates = [
+      ...lics.flatMap((l) => [
+        l.driverLicenceExpiry,
+        l.vehicleLicenceExpiry,
+        l.insuranceExpiry,
+        l.motExpiry,
+      ]),
+      ...trns.map((t) => t.expiryDate),
+    ].filter(Boolean);
+    if (dates.length === 0) return null;
+    const days = dates.map(daysUntil).filter((d) => d !== null);
+    const worst = Math.min(...days);
+    if (worst < 0) return "expired";
+    if (worst <= 30) return "critical";
+    if (worst <= 60) return "warning";
+    return "ok";
+  };
+
   const filtered = staff.filter((s) => {
     if (typeF !== "all" && s.type !== typeF) return false;
     if (search && !s.name.toLowerCase().includes(search.toLowerCase()))
@@ -218,9 +249,39 @@ export default function Staff() {
                       {s.name[0].toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {s.name}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          {s.name}
+                        </p>
+                        {(() => {
+                          const status = getComplianceStatus(s.id);
+                          if (!status || status === "ok") return null;
+                          return (
+                            <span
+                              title={
+                                status === "expired"
+                                  ? "Compliance expired"
+                                  : status === "critical"
+                                    ? "Expiring within 30 days"
+                                    : "Expiring within 60 days"
+                              }
+                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                                status === "expired"
+                                  ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+                                  : status === "critical"
+                                    ? "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400"
+                                    : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-500"
+                              }`}
+                            >
+                              {status === "expired"
+                                ? "⚠ Expired"
+                                : status === "critical"
+                                  ? "⚠ <30d"
+                                  : "⚠ <60d"}
+                            </span>
+                          );
+                        })()}
+                      </div>
                       <Badge type={s.type} />
                     </div>
                   </div>

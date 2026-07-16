@@ -38,6 +38,8 @@ export default function Routes() {
     poHistory,
     setPoHistory,
     billingRecipients,
+    staffLicences,
+    staffTraining,
   } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -222,6 +224,36 @@ export default function Routes() {
 
   const getName = (id) => staff.find((s) => s.id === id)?.name || "—";
 
+  const getDriverComplianceStatus = (staffId) => {
+    if (!staffId) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const daysUntil = (dateStr) => {
+      if (!dateStr) return null;
+      const d = new Date(dateStr);
+      d.setHours(0, 0, 0, 0);
+      return Math.floor((d - today) / 86400000);
+    };
+    const lics = staffLicences.filter((l) => l.staffId === staffId);
+    const trns = staffTraining.filter((t) => t.staffId === staffId);
+    const dates = [
+      ...lics.flatMap((l) => [
+        l.driverLicenceExpiry,
+        l.vehicleLicenceExpiry,
+        l.insuranceExpiry,
+        l.motExpiry,
+      ]),
+      ...trns.map((t) => t.expiryDate),
+    ].filter(Boolean);
+    if (dates.length === 0) return null;
+    const days = dates.map(daysUntil).filter((d) => d !== null);
+    const worst = Math.min(...days);
+    if (worst < 0) return "expired";
+    if (worst <= 30) return "critical";
+    if (worst <= 60) return "warning";
+    return "ok";
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader
@@ -301,7 +333,39 @@ export default function Routes() {
                         {r.school || "—"}
                       </td>
                       <td className="td text-gray-700 dark:text-gray-300">
-                        {getName(r.primaryDriverId)}
+                        <div className="flex items-center gap-1.5">
+                          <span>{getName(r.primaryDriverId)}</span>
+                          {(() => {
+                            const status = getDriverComplianceStatus(
+                              r.primaryDriverId,
+                            );
+                            if (!status || status === "ok") return null;
+                            return (
+                              <span
+                                title={
+                                  status === "expired"
+                                    ? "Driver compliance expired"
+                                    : status === "critical"
+                                      ? "Expiring within 30 days"
+                                      : "Expiring within 60 days"
+                                }
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                                  status === "expired"
+                                    ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+                                    : status === "critical"
+                                      ? "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400"
+                                      : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-500"
+                                }`}
+                              >
+                                {status === "expired"
+                                  ? "⚠ Expired"
+                                  : status === "critical"
+                                    ? "⚠ <30d"
+                                    : "⚠ <60d"}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       </td>
                       <td className="td text-gray-700 dark:text-gray-300">
                         {getName(r.primaryPAId)}
