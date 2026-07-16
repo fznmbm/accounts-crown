@@ -631,9 +631,6 @@ export default function InvoiceSubmissions() {
                         .forEach((d) => {
                           weekendMap[d.date] = d.amount;
                         });
-                      // Build full calendar month (Mon-Fri) for the submission's
-                      // month/year — NOT the period dates. Period is for the
-                      // declaration record only and must never hide entered figures.
                       const rows = [];
                       const cur = new Date(viewing.year, viewing.month, 1);
                       while (cur.getMonth() === viewing.month) {
@@ -645,19 +642,55 @@ export default function InvoiceSubmissions() {
                         }
                         cur.setDate(cur.getDate() + 1);
                       }
-                      // Any worked day not in the generated month grid (shouldn't normally
-                      // happen, but guards against stray/out-of-month data) — always show it
                       const extraKeys = Object.keys(workedMap).filter(
                         (k) => !rows.includes(k),
                       );
+
+                      // ── Anomaly detection ──────────────────────────────
+                      const workedAmounts = Object.values(workedMap).map(
+                        (a) => parseFloat(a) || 0,
+                      );
+                      const workedDayCount = workedAmounts.length;
+                      // Find modal (most common) amount
+                      const freq = {};
+                      workedAmounts.forEach((a) => {
+                        freq[a] = (freq[a] || 0) + 1;
+                      });
+                      const standardAmount =
+                        workedDayCount > 0
+                          ? parseFloat(
+                              Object.entries(freq).sort(
+                                (a, b) => b[1] - a[1],
+                              )[0][0],
+                            )
+                          : null;
+                      const anomalies = Object.entries(workedMap)
+                        .filter(
+                          ([, amt]) =>
+                            standardAmount !== null &&
+                            Math.abs(parseFloat(amt) - standardAmount) > 0.01,
+                        )
+                        .sort(([a], [b]) => a.localeCompare(b));
+
                       return (
                         <>
                           {rows.map((key) => {
                             const amount = workedMap[key];
+                            const isAnomaly =
+                              amount &&
+                              standardAmount !== null &&
+                              Math.abs(parseFloat(amount) - standardAmount) >
+                                0.01;
                             return (
                               <div
                                 key={key}
-                                className={`flex justify-between text-xs ${amount ? "text-gray-600 dark:text-gray-400" : "text-gray-300 dark:text-gray-600"}`}
+                                className={`flex justify-between text-xs ${
+                                  isAnomaly
+                                    ? "text-amber-600 dark:text-amber-400 font-semibold"
+                                    : amount
+                                      ? "text-gray-600 dark:text-gray-400"
+                                      : "text-gray-300 dark:text-gray-600"
+                                }`}
                               >
                                 <span>
                                   {new Date(
@@ -667,6 +700,7 @@ export default function InvoiceSubmissions() {
                                     day: "numeric",
                                     month: "short",
                                   })}
+                                  {isAnomaly && <span className="ml-1">⚠</span>}
                                 </span>
                                 <span className={amount ? "font-mono" : ""}>
                                   {amount ? fmt(amount) : "—"}
@@ -714,6 +748,53 @@ export default function InvoiceSubmissions() {
                               <span className="font-mono">{fmt(amount)}</span>
                             </div>
                           ))}
+
+                          {/* ── Day count + anomaly summary ── */}
+                          <div className="pt-2 mt-1 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-xs text-gray-400 dark:text-gray-500">
+                            <span>
+                              {workedDayCount} day
+                              {workedDayCount !== 1 ? "s" : ""} worked
+                              {standardAmount !== null && (
+                                <span className="ml-1">
+                                  · usual {fmt(standardAmount)}/day
+                                </span>
+                              )}
+                            </span>
+                            <span className="font-mono font-semibold text-gray-600 dark:text-gray-400">
+                              {fmt(r.total)}
+                            </span>
+                          </div>
+                          {anomalies.length > 0 && (
+                            <div className="mt-1 p-2 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg space-y-1">
+                              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                                ⚠ {anomalies.length} day
+                                {anomalies.length !== 1 ? "s" : ""} with
+                                different amount
+                              </p>
+                              {anomalies.map(([key, amt]) => (
+                                <div
+                                  key={`anom_${key}`}
+                                  className="flex justify-between text-xs text-amber-600 dark:text-amber-400"
+                                >
+                                  <span>
+                                    {new Date(
+                                      key.replace(/-/g, "/"),
+                                    ).toLocaleDateString("en-GB", {
+                                      weekday: "short",
+                                      day: "numeric",
+                                      month: "short",
+                                    })}
+                                  </span>
+                                  <span className="font-mono">
+                                    {fmt(amt)}{" "}
+                                    <span className="text-amber-400 dark:text-amber-500">
+                                      (usual {fmt(standardAmount)})
+                                    </span>
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </>
                       );
                     })()}
