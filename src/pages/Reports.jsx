@@ -291,6 +291,39 @@ export default function Reports() {
   const pct = (n) => (n === null ? "—" : `${n.toFixed(1)}%`);
   const dash = (n) => (n === 0 ? "—" : fmt(n));
 
+  // ── Aged debtor report ───────────────────────────────────────────────────
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const agedDebtors = invoices
+    .filter((x) => (x.total || 0) - (x.paidAmount || 0) > 0.01)
+    .map((x) => {
+      const outstanding = (x.total || 0) - (x.paidAmount || 0);
+      const invoiceDate = x.invoiceDate
+        ? new Date(x.invoiceDate)
+        : new Date(x.year, x.month, 1);
+      const daysOld = Math.floor((today - invoiceDate) / 86400000);
+      const bucket =
+        daysOld <= 30
+          ? "0–30"
+          : daysOld <= 60
+            ? "31–60"
+            : daysOld <= 90
+              ? "61–90"
+              : "90+";
+      return { ...x, outstanding, daysOld, bucket };
+    })
+    .sort((a, b) => b.daysOld - a.daysOld);
+
+  const agedBuckets = ["0–30", "31–60", "61–90", "90+"].map((label) => {
+    const items = agedDebtors.filter((x) => x.bucket === label);
+    return {
+      label,
+      count: items.length,
+      total: items.reduce((s, x) => s + x.outstanding, 0),
+    };
+  });
+  const totalOutstanding = agedDebtors.reduce((s, x) => s + x.outstanding, 0);
+
   // ── Shared classes ──
   const theadBg = "thead-row";
   const tfootBg = "tfoot-row";
@@ -750,6 +783,139 @@ export default function Reports() {
             </tfoot>
           </table>
         </div>
+
+        {/* Aged debtor report */}
+        {agedDebtors.length > 0 && (
+          <div className="card overflow-hidden">
+            <div className="card-section">
+              <h3 className="section-title">Aged debtor report</h3>
+              <p className="muted mt-0.5">
+                Outstanding invoices by age — all years
+              </p>
+            </div>
+
+            {/* Summary buckets */}
+            <div className="grid grid-cols-4 gap-0 border-b border-gray-100 dark:border-gray-700">
+              {agedBuckets.map((b) => (
+                <div
+                  key={b.label}
+                  className={`p-4 text-center border-r last:border-r-0 border-gray-100 dark:border-gray-700 ${
+                    b.label === "90+"
+                      ? "bg-red-50 dark:bg-red-900/10"
+                      : b.label === "61–90"
+                        ? "bg-amber-50 dark:bg-amber-900/10"
+                        : ""
+                  }`}
+                >
+                  <p
+                    className={`text-xs font-semibold uppercase tracking-wide mb-1 ${
+                      b.label === "90+"
+                        ? "text-red-600 dark:text-red-400"
+                        : b.label === "61–90"
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-gray-500 dark:text-gray-400"
+                    }`}
+                  >
+                    {b.label} days
+                  </p>
+                  <p
+                    className={`text-lg font-bold ${
+                      b.label === "90+"
+                        ? "text-red-700 dark:text-red-400"
+                        : b.label === "61–90"
+                          ? "text-amber-700 dark:text-amber-400"
+                          : "text-gray-900 dark:text-gray-100"
+                    }`}
+                  >
+                    {b.total > 0 ? fmt(b.total) : "—"}
+                  </p>
+                  {b.count > 0 && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                      {b.count} invoice{b.count !== 1 ? "s" : ""}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Detail table */}
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className={theadBg}>
+                    <th className="th">Invoice</th>
+                    <th className="th">Route</th>
+                    <th className="th-r">Invoice date</th>
+                    <th className="th-r">Days old</th>
+                    <th className="th-r">Total</th>
+                    <th className="th-r">Paid</th>
+                    <th className="th-r">Outstanding</th>
+                  </tr>
+                </thead>
+                <tbody className={divRow}>
+                  {agedDebtors.map((x) => (
+                    <tr key={x.id} className="tr">
+                      <td className="td">
+                        <p className="font-semibold text-gray-900 dark:text-gray-100">
+                          #{x.invoiceNumber}
+                        </p>
+                        <p className="muted">
+                          {MONTHS_SHORT[x.month]} {x.year}
+                        </p>
+                      </td>
+                      <td className="td">
+                        <p className="text-gray-700 dark:text-gray-300">
+                          Route {cleanNum(x.routeNumber)}
+                        </p>
+                        <p className="muted">{x.routeName}</p>
+                      </td>
+                      <td className="td-r text-gray-500 dark:text-gray-400">
+                        {x.invoiceDate
+                          ? new Date(x.invoiceDate).toLocaleDateString("en-GB")
+                          : "—"}
+                      </td>
+                      <td className="td-r">
+                        <span
+                          className={`font-semibold ${
+                            x.daysOld > 90
+                              ? "text-red-600 dark:text-red-400"
+                              : x.daysOld > 60
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-gray-700 dark:text-gray-300"
+                          }`}
+                        >
+                          {x.daysOld}d
+                        </span>
+                      </td>
+                      <td className="td-r text-gray-600 dark:text-gray-400">
+                        {fmt(x.total)}
+                      </td>
+                      <td className="td-r text-gray-500 dark:text-gray-400">
+                        {x.paidAmount > 0 ? fmt(x.paidAmount) : "—"}
+                      </td>
+                      <td className="td-r font-semibold text-red-600 dark:text-red-400">
+                        {fmt(x.outstanding)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className={tfootBg}>
+                    <td
+                      className="td font-bold text-gray-900 dark:text-gray-100"
+                      colSpan={6}
+                    >
+                      Total outstanding
+                    </td>
+                    <td className="td-r font-bold text-red-600 dark:text-red-400">
+                      {fmt(totalOutstanding)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Staff breakdown */}
         {(staffReport.filter((s) => s.total > 0).length > 0 ||
