@@ -310,3 +310,205 @@ export function generateInvoicePDFBlob({
 
   return doc.output("blob");
 }
+
+// ── Credit Note PDF ───────────────────────────────────────────────────────────
+export function generateCreditNotePDFBlob({
+  creditNote,
+  settings,
+  recipient = null,
+}) {
+  const amount = Math.abs(creditNote.total || 0);
+  const vatRate = Number(settings?.vatRate || 20);
+  const netTotal = Math.round((amount / (1 + vatRate / 100)) * 100) / 100;
+  const vat = Math.round((amount - netTotal) * 100) / 100;
+  const addressParts = (settings?.address || "")
+    .split(/\n|,\s*/)
+    .filter(Boolean);
+
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  let y = M;
+
+  // ── "CREDIT NOTE" title ───────────────────────────────────────────────────
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(24);
+  doc.setTextColor(180, 0, 0);
+  rText(doc, "CREDIT NOTE", PW - M, y + 8);
+  doc.setTextColor(0, 0, 0);
+
+  // ── Date ─────────────────────────────────────────────────────────────────
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("Date:", M, y + 2);
+  doc.setFont("helvetica", "normal");
+  const dateLabel = creditNote.invoiceDate
+    ? new Date(creditNote.invoiceDate).toLocaleDateString("en-GB")
+    : new Date().toLocaleDateString("en-GB");
+  doc.text(dateLabel, M + 16, y + 2);
+  y += 8;
+
+  // ── To / From ────────────────────────────────────────────────────────────
+  const recipientName = recipient?.name || "";
+  const recipientAddressLines = (recipient?.address || "")
+    .split("\n")
+    .filter(Boolean);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("To: ", M, y);
+  doc.setFont("helvetica", "normal");
+  doc.text(recipientName, M + doc.getTextWidth("To: "), y);
+  y += 5;
+  recipientAddressLines.forEach((line) => {
+    doc.text(line, M, y);
+    y += 5;
+  });
+  y += 3;
+
+  doc.setFont("helvetica", "bold");
+  doc.text("From: ", M, y);
+  doc.setFont("helvetica", "normal");
+  doc.text(settings?.companyName || "", M + doc.getTextWidth("From: "), y);
+  y += 5;
+  [
+    ...addressParts,
+    settings?.phone ? `Phone: ${settings.phone}` : null,
+    settings?.email ? `Email: ${settings.email}` : null,
+  ]
+    .filter(Boolean)
+    .forEach((line) => {
+      doc.text(line, M, y);
+      y += 5;
+    });
+  y += 5;
+
+  // ── Meta block ────────────────────────────────────────────────────────────
+  const metaRows = [
+    ["Credit Note Number", String(creditNote.invoiceNumber)],
+    ["Vendor Number", recipient?.supplierRef || settings?.supplierNumber || ""],
+  ];
+  if (creditNote.originalInvoiceId) {
+    // Try to show original invoice number from the reason field
+    metaRows.push(["Original Invoice Ref", creditNote.revisionNote ? "" : "—"]);
+  }
+  if (creditNote.routeNumber) {
+    metaRows.push([
+      "Route",
+      `Route ${creditNote.routeNumber} — ${creditNote.routeName || ""}`,
+    ]);
+  }
+  metaRows.forEach(([label, value]) => {
+    doc.setFont("helvetica", "bold");
+    doc.text(label, M, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(String(value || "—"), M + 60, y);
+    y += 6;
+  });
+  y += 4;
+
+  // ── Table ─────────────────────────────────────────────────────────────────
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.3);
+  const rowH = 8;
+  const tableStartY = y;
+  const SEP1 = M + 85;
+  const SEP2 = M + 107;
+  const SEP3 = M + 135;
+
+  // Header
+  doc.setFillColor(240, 240, 240);
+  doc.rect(M, y, CW, rowH, "FD");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("Description", M + 2, y + 5.5);
+  doc.text("Qty", COL_QTY_X, y + 5.5, { align: "center" });
+  doc.text("Unit Price", COL_UNIT_X, y + 5.5, { align: "center" });
+  rText(doc, "Amount", COL_AMT_X - 2, y + 5.5);
+  y += rowH;
+
+  // Single credit line
+  const desc = creditNote.revisionNote
+    ? creditNote.revisionNote.length > 55
+      ? creditNote.revisionNote.substring(0, 53) + "…"
+      : creditNote.revisionNote
+    : `Credit note${creditNote.routeNumber ? ` — Route ${creditNote.routeNumber}` : ""}`;
+
+  doc.setFont("helvetica", "normal");
+  doc.rect(M, y, CW, rowH, "D");
+  doc.text(desc, M + 2, y + 5.5);
+  doc.text("1", COL_QTY_X, y + 5.5, { align: "center" });
+  doc.setTextColor(180, 0, 0);
+  doc.text(`-${netTotal.toFixed(2)}`, COL_UNIT_X, y + 5.5, { align: "center" });
+  rText(doc, `-${fmtPDF(netTotal)}`, COL_AMT_X - 2, y + 5.5);
+  doc.setTextColor(0, 0, 0);
+  y += rowH;
+
+  // Vertical separators
+  [SEP1, SEP2, SEP3].forEach((x) => {
+    doc.line(x, tableStartY, x, y);
+  });
+  y += 3;
+
+  // ── Totals ────────────────────────────────────────────────────────────────
+  const rowHT = 8;
+  const totalsLeft = SEP2;
+  const totalsCW = PW - M - totalsLeft;
+
+  // Net Total
+  doc.rect(totalsLeft, y, totalsCW, rowHT, "D");
+  doc.line(SEP3, y, SEP3, y + rowHT);
+  doc.setFont("helvetica", "normal");
+  doc.text("Net Total", totalsLeft + 3, y + 5.5);
+  doc.setTextColor(180, 0, 0);
+  rText(doc, `-${fmtPDF(netTotal)}`, COL_AMT_X - 2, y + 5.5);
+  doc.setTextColor(0, 0, 0);
+  y += rowHT;
+
+  // VAT
+  doc.rect(totalsLeft, y, totalsCW, rowHT, "D");
+  doc.line(SEP3, y, SEP3, y + rowHT);
+  doc.text("VAT", totalsLeft + 3, y + 5.5);
+  doc.setTextColor(180, 0, 0);
+  rText(doc, `-${fmtPDF(vat)}`, COL_AMT_X - 2, y + 5.5);
+  doc.setTextColor(0, 0, 0);
+  y += rowHT;
+
+  // Total — shaded
+  doc.setFillColor(255, 240, 240);
+  doc.rect(totalsLeft, y, totalsCW, rowHT, "FD");
+  doc.line(SEP3, y, SEP3, y + rowHT);
+  doc.setFont("helvetica", "bold");
+  doc.text("Credit Total", totalsLeft + 3, y + 5.5);
+  doc.setTextColor(180, 0, 0);
+  rText(doc, `-${fmtPDF(amount)}`, COL_AMT_X - 2, y + 5.5);
+  doc.setTextColor(0, 0, 0);
+  y += rowHT + 8;
+
+  // ── Footer ────────────────────────────────────────────────────────────────
+  doc.setLineWidth(0.3);
+  doc.setDrawColor(200, 200, 200);
+  doc.line(M, y, PW - M, y);
+  y += 6;
+
+  const footerRows = [
+    ["VAT Registration No.", settings?.vatNumber || ""],
+    ["Company Name", settings?.companyName || ""],
+    ["Account No.", settings?.accountNo || ""],
+    ["Sort Code", settings?.sortCode || ""],
+  ];
+  const footerBoxH = footerRows.length * 7 + 6;
+  const footerBoxW = 112;
+
+  doc.setFillColor(248, 248, 248);
+  doc.setDrawColor(180, 180, 180);
+  doc.rect(M, y, footerBoxW, footerBoxH, "FD");
+  y += 5;
+  doc.setFontSize(9);
+  footerRows.forEach(([label, value]) => {
+    doc.setFont("helvetica", "bold");
+    doc.text(label, M + 3, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(String(value || "—"), M + 50, y);
+    y += 7;
+  });
+
+  return doc.output("blob");
+}

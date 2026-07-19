@@ -21,6 +21,7 @@ import {
 // invoiceGenerator (HTML popup) removed — ZIP generation uses invoicePDFBlob exclusively
 //import { generateInvoicePDF } from "../lib/invoiceGenerator";
 import { generateInvoicePDFBlob } from "../lib/invoicePDFBlob";
+import { generateCreditNotePDFBlob } from "../lib/invoicePDFBlob";
 import JSZip from "jszip";
 
 const STATUS_OPTS = ["unpaid", "partial", "paid"];
@@ -912,6 +913,26 @@ export default function Invoices() {
                                 CN
                               </button>
                             )}
+                          {inv.type === "credit_note" && (
+                            <button
+                              className="btn-ghost text-purple-600 dark:text-purple-400"
+                              onClick={() => {
+                                const blob = generateCreditNotePDFBlob({
+                                  creditNote: inv,
+                                  settings,
+                                  recipient: null,
+                                });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = `credit-note-${inv.invoiceNumber}.pdf`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                              }}
+                            >
+                              ↓ PDF
+                            </button>
+                          )}
                           <button
                             className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                             onClick={() => del(inv.id)}
