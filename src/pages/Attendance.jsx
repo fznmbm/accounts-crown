@@ -453,6 +453,249 @@ export default function Attendance() {
     if (newRecords.length > 0) setAttendance([...attendance, ...newRecords]);
   };
 
+  // ── Generate from schedule ────────────────────────────────────────────────
+  const generateFromSchedule = async () => {
+    const newRecords = [];
+    const holidayRecords = [];
+    const skipped = [];
+
+    workingDays.forEach((date) => {
+      activeRoutes.forEach((r) => {
+        if (getAtt(date, r.id)) {
+          skipped.push(1);
+          return;
+        }
+        if (isNonOperational(date, r.id)) return;
+        const primaryDriver = staff.find((s) => s.id === r.primaryDriverId);
+        const primaryPA = staff.find((s) => s.id === r.primaryPAId);
+        const routePupils = pupils.filter(
+          (p) => p.routeId === r.id && p.status === "active",
+        );
+        const dateStr = dateKey(date);
+        if (isHoliday(date, r.id)) {
+          const holType =
+            holidays.find(
+              (h) =>
+                h.date === dateStr &&
+                (h.allRoutes || h.routeIds?.includes(r.id)),
+            )?.type || "school_holiday";
+          const noRunReason =
+            holType === "bank_holiday"
+              ? "bank_holiday"
+              : holType === "inset_day"
+                ? "inset_day"
+                : "school_holiday";
+          holidayRecords.push({
+            id: uid(),
+            month,
+            year,
+            date: dateStr,
+            routeId: r.id,
+            routeNumber: r.number,
+            status: "no_run",
+            daysValue: 0,
+            driverId: "",
+            driverName: "",
+            isCoverDriver: false,
+            isSplitRun: false,
+            isExternalDriver: false,
+            externalDriverName: "",
+            isExternalPA: false,
+            externalPAName: "",
+            amDriverId: null,
+            amDriverName: null,
+            pmDriverId: null,
+            pmDriverName: null,
+            amPaId: null,
+            amPaName: null,
+            pmPaId: null,
+            pmPaName: null,
+            paId: "",
+            paName: "",
+            isCoverPA: false,
+            childrenAttendance: [],
+            noRunReason,
+            notes: "",
+            createdAt: Date.now(),
+          });
+          return;
+        }
+        newRecords.push({
+          id: uid(),
+          month,
+          year,
+          date: dateStr,
+          routeId: r.id,
+          routeNumber: r.number,
+          status: "ran",
+          daysValue: 1,
+          driverId: r.primaryDriverId || "",
+          driverName: primaryDriver?.name || "",
+          isCoverDriver: false,
+          isSplitRun: false,
+          isExternalDriver: false,
+          externalDriverName: "",
+          isExternalPA: false,
+          externalPAName: "",
+          amDriverId: null,
+          amDriverName: null,
+          pmDriverId: null,
+          pmDriverName: null,
+          amPaId: null,
+          amPaName: null,
+          pmPaId: null,
+          pmPaName: null,
+          paId: r.primaryPAId || "",
+          paName: primaryPA?.name || "",
+          isCoverPA: false,
+          childrenAttendance: routePupils.map((p) => ({
+            childId: p.id,
+            name: `${p.firstName} ${p.lastName}`,
+            attended: true,
+            absenceReason: "",
+          })),
+          noRunReason: "",
+          notes: "",
+          createdAt: Date.now(),
+        });
+      });
+    });
+
+    const total = newRecords.length + holidayRecords.length;
+    if (total === 0 && skipped.length > 0) {
+      toast.info("All days already recorded for this month.");
+      return;
+    }
+    if (total === 0) {
+      toast.info("No days to generate.");
+      return;
+    }
+
+    const confirmed = await showConfirm({
+      title: `Generate ${MONTHS[month]} ${year} schedule?`,
+      message: [
+        `${newRecords.length} operational day${newRecords.length !== 1 ? "s" : ""} → ran with primary drivers.`,
+        holidayRecords.length > 0
+          ? `${holidayRecords.length} holiday/no-run day${holidayRecords.length !== 1 ? "s" : ""} → auto-detected from calendar.`
+          : "",
+        skipped.length > 0
+          ? `${skipped.length} already recorded day${skipped.length !== 1 ? "s" : ""} → skipped.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+      type: "info",
+      confirmLabel: "Generate schedule",
+    });
+
+    if (confirmed) {
+      setAttendance([...attendance, ...newRecords, ...holidayRecords]);
+      toast.success(
+        `Schedule generated — ${newRecords.length} run day${newRecords.length !== 1 ? "s" : ""} + ${holidayRecords.length} holiday day${holidayRecords.length !== 1 ? "s" : ""}.`,
+      );
+    }
+  };
+
+  // ── Copy from previous month ──────────────────────────────────────────────
+  const copyFromPreviousMonth = async () => {
+    const prevMonth = month === 0 ? 11 : month - 1;
+    const prevYear = month === 0 ? year - 1 : year;
+    const prevRecords = attendance.filter(
+      (a) => a.month === prevMonth && a.year === prevYear,
+    );
+    if (prevRecords.length === 0) {
+      toast.error(
+        `No attendance records found for ${MONTHS[prevMonth]} ${prevYear}.`,
+      );
+      return;
+    }
+
+    const newRecords = [];
+    const skipped = [];
+
+    prevRecords.forEach((prev) => {
+      const prevDate = new Date(prev.date.replace(/-/g, "/"));
+      const prevDow = prevDate.getDay();
+
+      // Build ordered list of same-DOW dates in prev month
+      const prevMonthSameDow = [];
+      const pCur = new Date(prevYear, prevMonth, 1);
+      while (pCur.getMonth() === prevMonth) {
+        if (pCur.getDay() === prevDow)
+          prevMonthSameDow.push(
+            `${pCur.getFullYear()}-${String(pCur.getMonth() + 1).padStart(2, "0")}-${String(pCur.getDate()).padStart(2, "0")}`,
+          );
+        pCur.setDate(pCur.getDate() + 1);
+      }
+      const prevIdx = prevMonthSameDow.indexOf(prev.date);
+      if (prevIdx === -1) return;
+
+      // Find equivalent date in current month
+      const sameDowDays = workingDays.filter((d) => d.getDay() === prevDow);
+      const targetDay = sameDowDays[prevIdx];
+      if (!targetDay) return;
+
+      const targetDateStr = dateKey(targetDay);
+
+      if (getAtt(targetDay, prev.routeId)) {
+        skipped.push(targetDateStr);
+        return;
+      }
+      if (isNonOperational(targetDay, prev.routeId)) return;
+
+      const routePupils = pupils.filter(
+        (p) => p.routeId === prev.routeId && p.status === "active",
+      );
+
+      newRecords.push({
+        ...prev,
+        id: uid(),
+        month,
+        year,
+        date: targetDateStr,
+        childrenAttendance:
+          routePupils.length > 0
+            ? routePupils.map((p) => ({
+                childId: p.id,
+                name: `${p.firstName} ${p.lastName}`,
+                attended: true,
+                absenceReason: "",
+              }))
+            : prev.childrenAttendance,
+        createdAt: Date.now(),
+      });
+    });
+
+    if (newRecords.length === 0) {
+      toast.info(
+        "Nothing to copy — all days already recorded or no matching dates.",
+      );
+      return;
+    }
+
+    const confirmed = await showConfirm({
+      title: `Copy from ${MONTHS[prevMonth]} ${prevYear}?`,
+      message: [
+        `${newRecords.length} record${newRecords.length !== 1 ? "s" : ""} will be copied into ${MONTHS[month]} ${year}.`,
+        skipped.length > 0
+          ? `${skipped.length} day${skipped.length !== 1 ? "s" : ""} already recorded will be skipped.`
+          : "",
+        "Driver assignments, cover records and no-run reasons all copied.",
+      ]
+        .filter(Boolean)
+        .join(" "),
+      type: "info",
+      confirmLabel: "Copy records",
+    });
+
+    if (confirmed) {
+      setAttendance([...attendance, ...newRecords]);
+      toast.success(
+        `${newRecords.length} record${newRecords.length !== 1 ? "s" : ""} copied from ${MONTHS[prevMonth]} ${prevYear}.`,
+      );
+    }
+  };
+
   const openBulkAssign = (route) => {
     setBulkRoute(route);
     setBulkDriverId(route.primaryDriverId || "");
@@ -1147,6 +1390,18 @@ export default function Attendance() {
                 </option>
               ))}
             </select>
+            <button
+              className="btn-secondary text-sm"
+              onClick={generateFromSchedule}
+            >
+              📅 Generate schedule
+            </button>
+            <button
+              className="btn-secondary text-sm"
+              onClick={copyFromPreviousMonth}
+            >
+              ⬆ Copy prev month
+            </button>
             <button
               className="btn-secondary text-sm"
               onClick={async () => {
