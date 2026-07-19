@@ -78,6 +78,15 @@ export default function Invoices() {
   const [genStartNum, setGenStartNum] = useState("");
   const [genDays, setGenDays] = useState({});
   const [genBandDays, setGenBandDays] = useState({});
+  const [showCreditNote, setShowCreditNote] = useState(false);
+  const [creditSource, setCreditSource] = useState(null);
+  const [creditForm, setCreditForm] = useState({
+    creditNumber: "",
+    amount: "",
+    reason: "",
+    invoiceDate: new Date().toISOString().split("T")[0],
+  });
+  const [showCreditNotes, setShowCreditNotes] = useState(false);
   const [genNotes, setGenNotes] = useState({});
   const [genRecipientId, setGenRecipientId] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -231,6 +240,72 @@ export default function Invoices() {
     setRevising(inv);
     setReviseNote("");
     setShowRevise(true);
+  };
+
+  const openCreditNote = (inv) => {
+    setCreditSource(inv || null);
+    // Auto-generate credit note number
+    let autoNum = "";
+    if (inv) {
+      const existing = invoices.filter(
+        (x) => x.type === "credit_note" && x.originalInvoiceId === inv.id,
+      );
+      autoNum =
+        existing.length === 0
+          ? `CN-${inv.invoiceNumber}`
+          : `CN-${inv.invoiceNumber}-${existing.length + 1}`;
+    } else {
+      // Standalone — use next invoice number with CN prefix
+      const nums = invoices
+        .map((x) => parseInt(x.invoiceNumber))
+        .filter(Boolean);
+      const next = nums.length ? Math.max(...nums) + 1 : 1;
+      autoNum = `CN-${next}`;
+    }
+    setCreditForm({
+      creditNumber: autoNum,
+      amount: "",
+      reason: "",
+      invoiceDate: new Date().toISOString().split("T")[0],
+    });
+    setShowCreditNote(true);
+  };
+
+  const saveCreditNote = () => {
+    if (
+      !creditForm.creditNumber?.trim() ||
+      !creditForm.amount ||
+      !creditForm.reason?.trim()
+    )
+      return;
+    const amount = Math.abs(parseFloat(creditForm.amount)) || 0;
+    const vatRate = Number(settings?.vatRate || 20);
+    const netTotal = Math.round((amount / (1 + vatRate / 100)) * 100) / 100;
+    const vat = Math.round((amount - netTotal) * 100) / 100;
+    const record = {
+      id: uid(),
+      type: "credit_note",
+      invoiceNumber: creditForm.creditNumber,
+      originalInvoiceId: creditSource?.id || null,
+      poNumber: creditSource?.poNumber || "",
+      invoiceDate: creditForm.invoiceDate,
+      month: creditSource?.month ?? currentMonth(),
+      year: creditSource?.year ?? currentYear(),
+      routeNumber: creditSource?.routeNumber || "",
+      routeName: creditSource?.routeName || "",
+      daysWorked: 0,
+      unitPrice: 0,
+      netTotal: -netTotal,
+      vat: -vat,
+      total: -amount,
+      status: "paid",
+      paidAmount: -amount,
+      revisionNote: creditForm.reason,
+      createdAt: Date.now(),
+    };
+    setInvoices([...invoices, record]);
+    setShowCreditNote(false);
+    setCreditSource(null);
   };
 
   const saveRevision = () => {
@@ -432,6 +507,7 @@ export default function Invoices() {
 
   const filtered = invoices
     .filter((x) => {
+      if (!showCreditNotes && x.type === "credit_note") return false;
       if (statusF !== "all" && x.status !== statusF) return false;
       if (monthF !== "all" && x.month !== parseInt(monthF)) return false;
       if (yearF !== "all" && x.year !== parseInt(yearF)) return false;
@@ -446,7 +522,11 @@ export default function Invoices() {
       }
       return true;
     })
-    .sort((a, b) => Number(b.invoiceNumber) - Number(a.invoiceNumber));
+    .sort((a, b) => {
+      const aNum = parseInt(a.invoiceNumber) || 0;
+      const bNum = parseInt(b.invoiceNumber) || 0;
+      return bNum - aNum;
+    });
 
   const totalF = filtered.reduce((s, x) => s + (x.total || 0), 0);
   const paidF = filtered.reduce((s, x) => s + (x.paidAmount || 0), 0);
@@ -686,6 +766,21 @@ export default function Invoices() {
               </option>
             ))}
           </select>
+          <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showCreditNotes}
+              onChange={(e) => setShowCreditNotes(e.target.checked)}
+              className="w-3.5 h-3.5 rounded"
+            />
+            Show credit notes
+          </label>
+          <button
+            className="btn-ghost text-xs text-purple-600 dark:text-purple-400"
+            onClick={() => openCreditNote(null)}
+          >
+            + Standalone credit note
+          </button>
           {filtered.length > 0 && (
             <span className="ml-auto text-sm text-gray-500 dark:text-gray-400">
               {filtered.length} ·{" "}
@@ -730,16 +825,22 @@ export default function Invoices() {
                   {filtered.map((inv) => (
                     <tr key={inv.id} className="tr">
                       <td className="td">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <p className="font-mono font-semibold text-gray-900 dark:text-gray-100">
                             #{inv.invoiceNumber}
                           </p>
+                          {inv.type === "credit_note" && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
+                              CREDIT NOTE
+                            </span>
+                          )}
                           {inv.isRevised && (
                             <span className="chip-red text-xs">superseded</span>
                           )}
-                          {inv.originalInvoiceId && (
-                            <span className="chip-blue text-xs">revised</span>
-                          )}
+                          {inv.originalInvoiceId &&
+                            inv.type !== "credit_note" && (
+                              <span className="chip-blue text-xs">revised</span>
+                            )}
                         </div>
                         {inv.poNumber && (
                           <p className="font-mono text-xs text-gray-400 dark:text-gray-500">
@@ -785,21 +886,32 @@ export default function Invoices() {
                         <Badge type={inv.status} />
                       </td>
                       <td className="td">
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 flex-wrap">
                           <button
                             className="btn-ghost"
                             onClick={() => openEdit(inv)}
                           >
                             Edit
                           </button>
-                          {!inv.isRevised && !inv.originalInvoiceId && (
-                            <button
-                              className="btn-ghost text-amber-600 dark:text-amber-400"
-                              onClick={() => openRevise(inv)}
-                            >
-                              Revise
-                            </button>
-                          )}
+                          {!inv.isRevised &&
+                            !inv.originalInvoiceId &&
+                            inv.type !== "credit_note" && (
+                              <button
+                                className="btn-ghost text-amber-600 dark:text-amber-400"
+                                onClick={() => openRevise(inv)}
+                              >
+                                Revise
+                              </button>
+                            )}
+                          {inv.type !== "credit_note" &&
+                            inv.status === "paid" && (
+                              <button
+                                className="btn-ghost text-purple-600 dark:text-purple-400"
+                                onClick={() => openCreditNote(inv)}
+                              >
+                                CN
+                              </button>
+                            )}
                           <button
                             className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                             onClick={() => del(inv.id)}
@@ -1538,6 +1650,136 @@ export default function Invoices() {
           </ModalFooter>
         </Modal>
       )}
+      {showCreditNote && (
+        <Modal
+          title={
+            creditSource
+              ? `Credit note — Invoice #${creditSource.invoiceNumber}`
+              : "Standalone credit note"
+          }
+          onClose={() => setShowCreditNote(false)}
+          size="md"
+        >
+          <div className="space-y-4">
+            {creditSource && (
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Original invoice
+                  </span>
+                  <span className="font-mono font-semibold">
+                    #{creditSource.invoiceNumber}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Route
+                  </span>
+                  <span>
+                    Route {creditSource.routeNumber} — {creditSource.routeName}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Original total
+                  </span>
+                  <span className="font-semibold">
+                    {fmt(creditSource.total)}
+                  </span>
+                </div>
+              </div>
+            )}
+            <FormField
+              label="Credit note number"
+              hint="Auto-generated — override if needed"
+            >
+              <input
+                className="input font-mono"
+                value={creditForm.creditNumber}
+                onChange={(e) =>
+                  setCreditForm((p) => ({ ...p, creditNumber: e.target.value }))
+                }
+                placeholder="CN-1407"
+              />
+            </FormField>
+            <FormField label="Credit note date">
+              <input
+                className="input"
+                type="date"
+                value={creditForm.invoiceDate}
+                onChange={(e) =>
+                  setCreditForm((p) => ({ ...p, invoiceDate: e.target.value }))
+                }
+              />
+            </FormField>
+            <FormField
+              label="Credit amount (£)"
+              hint="Enter the amount to credit — VAT will be calculated automatically"
+            >
+              <input
+                className="input"
+                type="number"
+                step="0.01"
+                min="0"
+                value={creditForm.amount}
+                onChange={(e) =>
+                  setCreditForm((p) => ({ ...p, amount: e.target.value }))
+                }
+                placeholder="250.00"
+              />
+              {creditForm.amount &&
+                parseFloat(creditForm.amount) > 0 &&
+                (() => {
+                  const amount = parseFloat(creditForm.amount);
+                  const vatRate = Number(settings?.vatRate || 20);
+                  const net =
+                    Math.round((amount / (1 + vatRate / 100)) * 100) / 100;
+                  const vat = Math.round((amount - net) * 100) / 100;
+                  return (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Net: -{fmt(net)} · VAT: -{fmt(vat)} · Total: -
+                      {fmt(amount)}
+                    </p>
+                  );
+                })()}
+            </FormField>
+            <FormField label="Reason *">
+              <input
+                className="input"
+                value={creditForm.reason}
+                onChange={(e) =>
+                  setCreditForm((p) => ({ ...p, reason: e.target.value }))
+                }
+                placeholder="e.g. 2 days disputed by WSCC — route did not run 14–15 Apr"
+              />
+            </FormField>
+            <div className="p-3 bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800 rounded-lg text-xs text-purple-700 dark:text-purple-400">
+              ℹ Credit notes are stored as negative invoices. They appear in
+              remittance matching to offset the original invoice amount.
+            </div>
+          </div>
+          <ModalFooter>
+            <button
+              className="btn-secondary"
+              onClick={() => setShowCreditNote(false)}
+            >
+              Cancel
+            </button>
+            <button
+              className="btn-primary"
+              onClick={saveCreditNote}
+              disabled={
+                !creditForm.creditNumber?.trim() ||
+                !creditForm.amount ||
+                !creditForm.reason?.trim()
+              }
+            >
+              Issue credit note
+            </button>
+          </ModalFooter>
+        </Modal>
+      )}
+
       {showRevise && revising && (
         <Modal
           title={`Revise invoice #${revising.invoiceNumber}`}
