@@ -1153,10 +1153,18 @@ export default function Reports() {
               })
               .sort((a, b) => a.date.localeCompare(b.date));
 
+            const totalInPeriod = attendance.filter((a) => {
+              if (journeyRouteId && a.routeId !== journeyRouteId) return false;
+              if (journeyFrom && a.date < journeyFrom) return false;
+              if (journeyTo && a.date > journeyTo) return false;
+              return true;
+            }).length;
             if (filteredAtt.length === 0) {
               return (
                 <div className="px-5 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
-                  No journey records found for the selected filters.
+                  {totalInPeriod > 0
+                    ? `${totalInPeriod} attendance record${totalInPeriod !== 1 ? "s" : ""} found but all are no-run days — tick "Include no-run days" to see them.`
+                    : "No attendance records found for this period. Fill in the Attendance Register first."}
                 </div>
               );
             }
