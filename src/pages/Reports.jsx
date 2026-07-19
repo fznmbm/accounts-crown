@@ -139,7 +139,15 @@ export default function Reports() {
     allocations,
     settings,
     billingRecipients,
+    attendance,
+    staffLicences,
+    pupils,
   } = useApp();
+
+  // ── Journey report state ──────────────────────────────────────────────────
+  const [journeyRouteId, setJourneyRouteId] = useState("");
+  const [journeyFrom, setJourneyFrom] = useState("");
+  const [journeyTo, setJourneyTo] = useState("");
   const defaultRecipient =
     billingRecipients?.find((r) => r.isDefault) ||
     billingRecipients?.[0] ||
@@ -916,6 +924,308 @@ export default function Reports() {
             </div>
           </div>
         )}
+
+        {/* Journey records */}
+        <div className="card overflow-hidden">
+          <div className="card-section">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="section-title">Journey records</h3>
+                <p className="muted mt-0.5">
+                  Operational journey log for authority inquiries — filter by
+                  route and date range
+                </p>
+              </div>
+              {(() => {
+                const filtered = attendance
+                  .filter((a) => {
+                    if (journeyRouteId && a.routeId !== journeyRouteId)
+                      return false;
+                    if (journeyFrom && a.date < journeyFrom) return false;
+                    if (journeyTo && a.date > journeyTo) return false;
+                    return true;
+                  })
+                  .sort((a, b) => a.date.localeCompare(b.date));
+                if (filtered.length === 0) return null;
+                return (
+                  <button
+                    className="btn-ghost text-xs flex-shrink-0"
+                    onClick={() => {
+                      const header = [
+                        "Date",
+                        "Route",
+                        "School",
+                        "Status",
+                        "Driver",
+                        "Vehicle Reg",
+                        "Driver Licence No",
+                        "PA",
+                        "Passengers",
+                        "No-Run Reason",
+                        "Notes",
+                      ];
+                      const rows = filtered.map((a) => {
+                        const route = routes.find((r) => r.id === a.routeId);
+                        const driverLic = staffLicences.find(
+                          (l) => l.staffId === a.driverId,
+                        );
+                        const routePupils = pupils.filter(
+                          (p) =>
+                            p.routeId === a.routeId && p.status === "active",
+                        );
+                        return [
+                          a.date,
+                          `Route ${a.routeNumber}`,
+                          route?.school || "",
+                          a.status,
+                          a.isExternalDriver
+                            ? a.externalDriverName
+                            : a.driverName || "",
+                          driverLic?.vehicleRegistration || "",
+                          driverLic?.driverLicenceNumber || "",
+                          a.isExternalPA ? a.externalPAName : a.paName || "",
+                          routePupils
+                            .map((p) => `${p.firstName} ${p.lastName}`)
+                            .join("; "),
+                          a.noRunReason || "",
+                          a.notes || "",
+                        ];
+                      });
+                      const routeNum = routes.find(
+                        (r) => r.id === journeyRouteId,
+                      )?.number;
+                      downloadCSV(
+                        `journey-records${routeNum ? `-route-${routeNum}` : ""}${journeyFrom ? `-from-${journeyFrom}` : ""}${journeyTo ? `-to-${journeyTo}` : ""}.csv`,
+                        [header, ...rows],
+                      );
+                    }}
+                  >
+                    ↓ CSV
+                  </button>
+                );
+              })()}
+            </div>
+
+            {/* Filters */}
+            <div className="flex gap-3 mt-4 flex-wrap items-center">
+              <select
+                className="input w-56"
+                value={journeyRouteId}
+                onChange={(e) => setJourneyRouteId(e.target.value)}
+              >
+                <option value="">All routes</option>
+                {routes.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    Route {r.number} — {r.name}
+                  </option>
+                ))}
+              </select>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                  From
+                </label>
+                <input
+                  className="input w-36"
+                  type="date"
+                  value={journeyFrom}
+                  onChange={(e) => setJourneyFrom(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                  To
+                </label>
+                <input
+                  className="input w-36"
+                  type="date"
+                  value={journeyTo}
+                  onChange={(e) => setJourneyTo(e.target.value)}
+                />
+              </div>
+              {(journeyRouteId || journeyFrom || journeyTo) && (
+                <button
+                  className="btn-ghost text-xs text-gray-400"
+                  onClick={() => {
+                    setJourneyRouteId("");
+                    setJourneyFrom("");
+                    setJourneyTo("");
+                  }}
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Table */}
+          {(() => {
+            const filtered = attendance
+              .filter((a) => {
+                if (journeyRouteId && a.routeId !== journeyRouteId)
+                  return false;
+                if (journeyFrom && a.date < journeyFrom) return false;
+                if (journeyTo && a.date > journeyTo) return false;
+                return true;
+              })
+              .sort((a, b) => a.date.localeCompare(b.date));
+
+            if (!journeyRouteId && !journeyFrom && !journeyTo) {
+              return (
+                <div className="px-5 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
+                  Select a route or date range above to view journey records.
+                </div>
+              );
+            }
+            if (filtered.length === 0) {
+              return (
+                <div className="px-5 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
+                  No journey records found for the selected filters.
+                </div>
+              );
+            }
+            return (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className={theadBg}>
+                      <th className="th">Date</th>
+                      <th className="th">Route</th>
+                      <th className="th">School</th>
+                      <th className="th">Driver</th>
+                      <th className="th">Vehicle reg</th>
+                      <th className="th">PA</th>
+                      <th className="th">Passengers</th>
+                      <th className="th">Status</th>
+                      <th className="th">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className={divRow}>
+                    {filtered.map((a) => {
+                      const route = routes.find((r) => r.id === a.routeId);
+                      const driverLic = staffLicences.find(
+                        (l) => l.staffId === a.driverId,
+                      );
+                      const routePupils = pupils.filter(
+                        (p) => p.routeId === a.routeId && p.status === "active",
+                      );
+                      const presentPupils =
+                        a.childrenAttendance?.length > 0
+                          ? routePupils.filter((p) =>
+                              a.childrenAttendance.find(
+                                (c) =>
+                                  c.childId === p.id && c.attended !== false,
+                              ),
+                            )
+                          : routePupils;
+                      const driverDisplay = a.isSplitRun
+                        ? `AM: ${a.amDriverName || "?"} / PM: ${a.pmDriverName || "?"}`
+                        : a.isExternalDriver
+                          ? `${a.externalDriverName} (ext)`
+                          : a.driverName || "—";
+                      const paDisplay = a.isExternalPA
+                        ? `${a.externalPAName} (ext)`
+                        : a.paName || "—";
+                      const statusColour =
+                        a.status === "ran"
+                          ? "text-green-700 dark:text-green-400"
+                          : a.status === "no_run"
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-blue-600 dark:text-blue-400";
+                      const statusLabel =
+                        a.status === "ran"
+                          ? "Ran"
+                          : a.status === "no_run"
+                            ? `No run${a.noRunReason ? ` — ${a.noRunReason.replace(/_/g, " ")}` : ""}`
+                            : "Half day";
+                      return (
+                        <tr
+                          key={a.id}
+                          className={`tr ${a.status === "no_run" ? "opacity-60" : ""}`}
+                        >
+                          <td className="td whitespace-nowrap">
+                            <p className="font-medium text-gray-900 dark:text-gray-100">
+                              {new Date(
+                                a.date.replace(/-/g, "/"),
+                              ).toLocaleDateString("en-GB", {
+                                weekday: "short",
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              })}
+                            </p>
+                          </td>
+                          <td className="td">
+                            <p className="font-semibold text-gray-900 dark:text-gray-100">
+                              Route {a.routeNumber}
+                            </p>
+                            <p className="muted">{route?.name}</p>
+                          </td>
+                          <td className="td text-gray-500 dark:text-gray-400 text-xs">
+                            {route?.school || "—"}
+                          </td>
+                          <td className="td">
+                            <p className="text-gray-700 dark:text-gray-300">
+                              {driverDisplay}
+                            </p>
+                            {driverLic?.driverLicenceNumber && (
+                              <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">
+                                Lic: {driverLic.driverLicenceNumber}
+                              </p>
+                            )}
+                          </td>
+                          <td className="td font-mono text-xs text-gray-600 dark:text-gray-400">
+                            {driverLic?.vehicleRegistration || "—"}
+                          </td>
+                          <td className="td text-gray-500 dark:text-gray-400 text-xs">
+                            {paDisplay}
+                          </td>
+                          <td className="td text-xs text-gray-600 dark:text-gray-400 max-w-[160px]">
+                            {presentPupils.length > 0 ? (
+                              presentPupils
+                                .map((p) => `${p.firstName} ${p.lastName}`)
+                                .join(", ")
+                            ) : (
+                              <span className="muted">—</span>
+                            )}
+                          </td>
+                          <td
+                            className={`td text-xs font-semibold whitespace-nowrap ${statusColour}`}
+                          >
+                            {statusLabel}
+                          </td>
+                          <td className="td text-xs text-gray-400 dark:text-gray-500">
+                            {a.notes || "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className={tfootBg}>
+                      <td
+                        className="td font-bold text-gray-900 dark:text-gray-100"
+                        colSpan={2}
+                      >
+                        {filtered.length} journey
+                        {filtered.length !== 1 ? "s" : ""}
+                      </td>
+                      <td
+                        className="td text-gray-500 dark:text-gray-400"
+                        colSpan={7}
+                      >
+                        {filtered.filter((a) => a.status === "ran").length} ran
+                        · {filtered.filter((a) => a.status === "no_run").length}{" "}
+                        no-run ·{" "}
+                        {filtered.filter((a) => a.status === "half_day").length}{" "}
+                        half day
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            );
+          })()}
+        </div>
 
         {/* Staff breakdown */}
         {(staffReport.filter((s) => s.total > 0).length > 0 ||
