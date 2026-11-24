@@ -127,11 +127,14 @@ export function AuthProvider({ children }) {
       const u = session?.user ?? null;
       if (!active) return;
       setUser(u);
-      for (let i = 0; i < 3; i++) {
-        if (await resolveWorkspace(u)) break;
-        await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+      let ok = false;
+      for (let i = 0; i < 3 && !ok; i++) {
+        ok = await resolveWorkspace(u);
+        if (!ok) await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
       }
-      if (active) setLoading(false);
+      if (!active) return;
+      if (!ok) setUser(null); // workspace could not load: show the login screen
+      setLoading(false);
     });
 
     // IMPORTANT: keep this callback synchronous. Awaiting a Supabase call
@@ -139,13 +142,18 @@ export function AuthProvider({ children }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("[auth]", event, new Date().toLocaleTimeString());
       const u = session?.user ?? null;
 
       if (event === "SIGNED_OUT") {
         if (manualLogoutRef.current) return; // logout() reloads the page
-        // Session lost mid-work: keep the app mounted, ask to sign in again
-        if (resolvedForRef.current) setSessionExpired(true);
+        if (resolvedForRef.current) {
+          // Session lost mid-work: keep the app mounted, ask to sign in again
+          setSessionExpired(true);
+        } else {
+          // Lost before the app finished loading: go to the login screen
+          setUser(null);
+          setEffectiveUserId(null);
+        }
         return;
       }
       if (!u) return;

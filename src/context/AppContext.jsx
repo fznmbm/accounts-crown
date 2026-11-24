@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef } from "react";
-import { supabase, AUTH_STORAGE_KEY } from "../lib/supabase";
+import { toast } from "sonner";
+import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
 
 export const DEFAULT_SETTINGS = {
@@ -709,85 +710,70 @@ const billingRecipientToDb = (r, uid) => ({
   created_at: r.createdAt,
 });
 
-// ── sync helper: replace all rows for user in a table ────────────────────────
-async function syncTable(table, data, toDb, userId) {
-  const base = import.meta.env.VITE_SUPABASE_URL;
-  const apikey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  let token;
-  try {
-    token = JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY))?.access_token;
-  } catch {
-    token = null;
-  }
-  if (!token) {
-    console.error(`syncTable ${table}: no auth token`);
-    return;
-  }
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    apikey,
-    "Content-Type": "application/json",
-    Prefer: "return=minimal,resolution=merge-duplicates",
-  };
+// ── Data helpers — all through the Supabase client, which refreshes the ──────
+// ── login token itself before each request ─────────────────────────────────
+const PAGE_SIZE = 1000; // Supabase returns at most 1,000 rows per request
+const UPSERT_CHUNK = 500;
+const DELETE_CHUNK = 100;
 
-  // Step 1: Upsert new data FIRST — if this fails, old data stays intact
-  if (data.length > 0) {
-    const res = await fetch(`${base}/rest/v1/${table}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(data.map((r) => toDb(r, userId))),
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      console.error(`syncTable ${table} upsert failed — data preserved:`, err);
-      return; // Abort — do NOT delete
-    }
-  }
-
-  // Step 2: Delete ONLY rows no longer in dataset (by ID)
-  const currentIds = data.map((r) => r.id);
-  if (currentIds.length > 0) {
-    await fetch(
-      `${base}/rest/v1/${table}?user_id=eq.${userId}&id=not.in.(${currentIds.join(",")})`,
-      { method: "DELETE", headers },
-    );
-  } else {
-    // No data at all — delete everything for this user
-    await fetch(`${base}/rest/v1/${table}?user_id=eq.${userId}`, {
-      method: "DELETE",
-      headers,
-    });
+// Load every row for a workspace, 1,000 at a time, so tables of any size load in full.
+// On any error returns data: null, so a half-loaded table is never used.
+async function fetchAll(table, ownerCol, ownerId) {
+  const rows = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .eq(ownerCol, ownerId)
+      .order("id", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) return { data: null, error };
+    rows.push(...data);
+    if (data.length < PAGE_SIZE) return { data: rows, error: null };
   }
 }
 
-// ── Shared direct fetch helper — bypasses GoTrue lock ──────────────────────
-function getAuthHeaders() {
-  const apikey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  const base = import.meta.env.VITE_SUPABASE_URL;
-  let token;
-  try {
-    token = JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY))?.access_token;
-  } catch {
-    token = null;
+// Save only what changed between the previous list and the new list:
+// upsert new or edited rows, delete only rows that were removed.
+// Rows this browser never had (e.g. a submission that just arrived) are never touched.
+async function saveDiff(
+  table,
+  prev,
+  next,
+  toDb,
+  ownerId,
+  ownerCol,
+  allowDelete,
+) {
+  const prevById = new Map(prev.map((r) => [r.id, JSON.stringify(r)]));
+  const nextIds = new Set(next.map((r) => r.id));
+  const changed = next.filter((r) => prevById.get(r.id) !== JSON.stringify(r));
+  const removed = allowDelete
+    ? prev.filter((r) => !nextIds.has(r.id)).map((r) => r.id)
+    : [];
+
+  for (let i = 0; i < changed.length; i += UPSERT_CHUNK) {
+    const rows = changed
+      .slice(i, i + UPSERT_CHUNK)
+      .map((r) => toDb(r, ownerId));
+    const { error } = await supabase
+      .from(table)
+      .upsert(rows, { onConflict: "id" });
+    if (error) return { error };
   }
-  return { base, apikey, token };
+  for (let i = 0; i < removed.length; i += DELETE_CHUNK) {
+    const { error } = await supabase
+      .from(table)
+      .delete()
+      .eq(ownerCol, ownerId)
+      .in("id", removed.slice(i, i + DELETE_CHUNK));
+    if (error) return { error };
+  }
+  return { error: null };
 }
 
-async function syncSettings(data, userId) {
-  const { base, apikey, token } = getAuthHeaders();
-  if (!token) return;
-  const res = await fetch(`${base}/rest/v1/settings`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      apikey,
-      "Content-Type": "application/json",
-      Prefer: "return=minimal,resolution=merge-duplicates",
-    },
-    body: JSON.stringify({ id: userId, user_id: userId, data }),
-  });
-  if (!res.ok) console.error("syncSettings error:", await res.text());
-}
+const byCreatedAsc = (a, b) => (a.createdAt || 0) - (b.createdAt || 0);
+const byCreatedDesc = (a, b) => (b.createdAt || 0) - (a.createdAt || 0);
 // ── Context ──────────────────────────────────────────────────────────────────
 const AppContext = createContext(null);
 
@@ -831,27 +817,27 @@ export function AppProvider({ children }) {
       try {
         const [r, inv, st, pay, rem, sett, alloc, poh, audit, ch, att, hol] =
           await Promise.all([
-            supabase.from("routes").select("*").eq("user_id", uid),
-            supabase.from("invoices").select("*").eq("user_id", uid),
-            supabase.from("staff").select("*").eq("user_id", uid),
-            supabase.from("payments").select("*").eq("user_id", uid),
-            supabase.from("remittances").select("*").eq("user_id", uid),
+            fetchAll("routes", "user_id", uid),
+            fetchAll("invoices", "user_id", uid),
+            fetchAll("staff", "user_id", uid),
+            fetchAll("payments", "user_id", uid),
+            fetchAll("remittances", "user_id", uid),
             supabase
               .from("settings")
               .select("*")
               .eq("user_id", uid)
               .maybeSingle(),
-            supabase.from("allocations").select("*").eq("user_id", uid),
-            supabase.from("po_history").select("*").eq("user_id", uid),
+            fetchAll("allocations", "user_id", uid),
+            fetchAll("po_history", "user_id", uid),
             supabase
               .from("audit_log")
               .select("*")
               .eq("user_id", uid)
               .order("created_at", { ascending: false })
               .limit(200),
-            supabase.from("children").select("*").eq("user_id", uid),
-            supabase.from("attendance").select("*").eq("user_id", uid),
-            supabase.from("school_holidays").select("*").eq("user_id", uid),
+            fetchAll("children", "user_id", uid),
+            fetchAll("attendance", "user_id", uid),
+            fetchAll("school_holidays", "user_id", uid),
           ]);
         setRawRoutes(
           (r.data || [])
@@ -892,26 +878,14 @@ export function AppProvider({ children }) {
         setRawHolidays((hol.data || []).map(holidayFromDb));
         if (hol.error) console.error("school_holidays:", hol.error);
 
-        const [lic, trn, tok, sub, app, br] = [
-          await supabase.from("staff_licences").select("*").eq("user_id", uid),
-          await supabase.from("staff_training").select("*").eq("user_id", uid),
-          await supabase
-            .from("staff_portal_tokens")
-            .select("*")
-            .eq("user_id", uid),
-          await supabase
-            .from("staff_invoice_submissions")
-            .select("*")
-            .eq("user_id", uid),
-          await supabase
-            .from("staff_applications")
-            .select("*")
-            .eq("target_user_id", uid),
-          await supabase
-            .from("billing_recipients")
-            .select("*")
-            .eq("owner_user_id", uid),
-        ];
+        const [lic, trn, tok, sub, app, br] = await Promise.all([
+          fetchAll("staff_licences", "user_id", uid),
+          fetchAll("staff_training", "user_id", uid),
+          fetchAll("staff_portal_tokens", "user_id", uid),
+          fetchAll("staff_invoice_submissions", "user_id", uid),
+          fetchAll("staff_applications", "target_user_id", uid),
+          fetchAll("billing_recipients", "owner_user_id", uid),
+        ]);
         setRawStaffLicences(
           (lic.data || [])
             .map(staffLicenceFromDb)
@@ -943,8 +917,42 @@ export function AppProvider({ children }) {
         if (pay.error) console.error("payments:", pay.error);
         if (rem.error) console.error("remittances:", rem.error);
         if (alloc.error) console.error("allocations:", alloc.error);
+
+        // Tell the user if anything failed to load — never fail silently
+        const failed = Object.entries({
+          routes: r,
+          invoices: inv,
+          staff: st,
+          payments: pay,
+          remittances: rem,
+          settings: sett,
+          allocations: alloc,
+          "PO history": poh,
+          children: ch,
+          attendance: att,
+          holidays: hol,
+          licences: lic,
+          training: trn,
+          "portal links": tok,
+          submissions: sub,
+          applications: app,
+          "billing recipients": br,
+        })
+          .filter(([, res]) => res.error)
+          .map(([name]) => name);
+        if (failed.length)
+          toast.error(
+            `Some data didn't load (${failed.join(", ")}). Refresh the page before making changes.`,
+            { duration: 15000 },
+          );
       } catch (e) {
         console.error("loadAll failed:", e);
+        toast.error(
+          "Your data didn't load. Refresh the page before making changes.",
+          {
+            duration: 15000,
+          },
+        );
       } finally {
         setLoading(false);
       }
@@ -958,51 +966,33 @@ export function AppProvider({ children }) {
     if (!effectiveUserId) return;
     const uid = effectiveUserId;
 
-    // Read token directly from localStorage — bypasses GoTrue lock entirely
-    const getToken = () => {
-      try {
-        return JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY))?.access_token;
-      } catch {
-        return null;
-      }
+    const refreshSubmissions = async () => {
+      const { data, error } = await fetchAll(
+        "staff_invoice_submissions",
+        "user_id",
+        uid,
+      );
+      if (!error && data) setRawSubmissions(data.map(submissionFromDb));
+    };
+    const refreshApplications = async () => {
+      const { data, error } = await fetchAll(
+        "staff_applications",
+        "target_user_id",
+        uid,
+      );
+      if (!error && data) setRawApplications(data.map(applicationFromDb));
     };
 
-    const base = import.meta.env.VITE_SUPABASE_URL;
-    const apikey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
+    // Backup to realtime every 30s — skipped while the tab is hidden,
+    // and run straight away when you come back to the tab
     const poll = () => {
-      const token = getToken();
-      if (!token) return;
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        apikey,
-        "Content-Type": "application/json",
-      };
-
-      fetch(
-        `${base}/rest/v1/staff_invoice_submissions?user_id=eq.${uid}&select=*&order=created_at.desc`,
-        { headers },
-      )
-        .then((r) => r.json())
-        .then((data) => {
-          if (Array.isArray(data))
-            setRawSubmissions(data.map(submissionFromDb));
-        })
-        .catch(() => {});
-
-      fetch(
-        `${base}/rest/v1/staff_applications?target_user_id=eq.${uid}&select=*&order=created_at.desc`,
-        { headers },
-      )
-        .then((r) => r.json())
-        .then((data) => {
-          if (Array.isArray(data))
-            setRawApplications(data.map(applicationFromDb));
-        })
-        .catch(() => {});
+      if (document.hidden) return;
+      refreshSubmissions();
+      refreshApplications();
     };
+    const pollInterval = setInterval(poll, 30000);
+    document.addEventListener("visibilitychange", poll);
 
-    const pollInterval = setInterval(poll, 30000); // 30 seconds
     const channel = supabase
       .channel("realtime-watch")
       .on(
@@ -1013,13 +1003,7 @@ export function AppProvider({ children }) {
           table: "staff_invoice_submissions",
           filter: `user_id=eq.${uid}`,
         },
-        async () => {
-          const { data } = await supabase
-            .from("staff_invoice_submissions")
-            .select("*")
-            .eq("user_id", uid);
-          setRawSubmissions((data || []).map(submissionFromDb));
-        },
+        refreshSubmissions,
       )
       .on(
         "postgres_changes",
@@ -1029,218 +1013,249 @@ export function AppProvider({ children }) {
           table: "staff_applications",
           filter: `target_user_id=eq.${uid}`,
         },
-        async () => {
-          const { data } = await supabase
-            .from("staff_applications")
-            .select("*")
-            .eq("target_user_id", uid);
-          setRawApplications((data || []).map(applicationFromDb));
-        },
+        refreshApplications,
       )
       .subscribe();
 
     return () => {
       clearInterval(pollInterval);
+      document.removeEventListener("visibilitychange", poll);
       supabase.removeChannel(channel);
     };
   }, [effectiveUserId]);
 
-  // ── Setters — update state + sync to Supabase ──────────────────────────────
-  const setRoutes = async (data, audit) => {
-    setRawRoutes(data);
-    await syncTable("routes", data, routeToDb, effectiveUserId);
-    if (audit)
-      await addAuditEntry(
-        audit.action,
-        "route",
-        audit.id,
-        audit.label,
-        audit.changes,
-      );
+  // ── Setters — update screen + save only the rows that changed ──────────────
+  // Latest list per table, so each save can work out exactly what changed
+  const latest = useRef({});
+  latest.current = {
+    routes,
+    invoices,
+    staff,
+    payments,
+    remittances,
+    allocations,
+    poHistory,
+    pupils,
+    attendance,
+    holidays,
+    staffLicences,
+    staffTraining,
+    portalTokens,
+    submissions,
+    applications,
+    billingRecipients,
   };
-  const setInvoices = async (data, audit) => {
-    setRawInvoices(data);
-    await syncTable("invoices", data, invoiceToDb, effectiveUserId);
-    if (audit)
-      await addAuditEntry(
-        audit.action,
-        "invoice",
-        audit.id,
-        audit.label,
-        audit.changes,
-      );
-  };
-  const setStaff = async (data, audit) => {
-    setRawStaff(data);
-    await syncTable("staff", data, staffToDb, effectiveUserId);
 
+  // Builds a setter for one table. Returns true when saved, false on failure.
+  // On failure: shows an error and reloads that table, so the screen shows
+  // what is really in the database.
+  const makeSetter = (key, table, toDb, fromDb, setRaw, opts = {}) => {
+    const {
+      ownerCol = "user_id",
+      allowDelete = true,
+      entity = null,
+      sort = null,
+    } = opts;
+    return async (next, audit) => {
+      const prev = latest.current[key] || [];
+      latest.current[key] = next;
+      setRaw(next);
+      const { error } = await saveDiff(
+        table,
+        prev,
+        next,
+        toDb,
+        effectiveUserId,
+        ownerCol,
+        allowDelete,
+      );
+      if (error) {
+        console.error(`save ${table} failed:`, error);
+        toast.error(
+          "Your change didn't save. The latest data has been reloaded — please try again.",
+          { duration: 10000 },
+        );
+        const { data } = await fetchAll(table, ownerCol, effectiveUserId);
+        if (data) {
+          const fresh = data.map(fromDb);
+          if (sort) fresh.sort(sort);
+          latest.current[key] = fresh;
+          setRaw(fresh);
+        }
+        return false;
+      }
+      if (audit && entity)
+        await addAuditEntry(
+          audit.action,
+          entity,
+          audit.id,
+          audit.label,
+          audit.changes,
+        );
+      return true;
+    };
+  };
+
+  const setRoutes = makeSetter(
+    "routes",
+    "routes",
+    routeToDb,
+    routeFromDb,
+    setRawRoutes,
+    { entity: "route", sort: byCreatedAsc },
+  );
+  const setInvoices = makeSetter(
+    "invoices",
+    "invoices",
+    invoiceToDb,
+    invoiceFromDb,
+    setRawInvoices,
+    { entity: "invoice" },
+  );
+  const setPayments = makeSetter(
+    "payments",
+    "payments",
+    paymentToDb,
+    paymentFromDb,
+    setRawPayments,
+    { entity: "payment" },
+  );
+  const setRemittances = makeSetter(
+    "remittances",
+    "remittances",
+    remittanceToDb,
+    remittanceFromDb,
+    setRawRemittances,
+    { sort: byCreatedDesc },
+  );
+  const setAllocations = makeSetter(
+    "allocations",
+    "allocations",
+    allocationToDb,
+    allocationFromDb,
+    setRawAllocations,
+  );
+  const setPoHistory = makeSetter(
+    "poHistory",
+    "po_history",
+    poHistoryToDb,
+    poHistoryFromDb,
+    setRawPoHistory,
+  );
+  const setPupils = makeSetter(
+    "pupils",
+    "children",
+    childToDb,
+    childFromDb,
+    setRawPupils,
+    { sort: byCreatedAsc },
+  );
+  // Attendance never deletes through the setter — removals go through deleteAttendanceRecords
+  const setAttendance = makeSetter(
+    "attendance",
+    "attendance",
+    attendanceToDb,
+    attendanceFromDb,
+    setRawAttendance,
+    { allowDelete: false },
+  );
+  const setHolidays = makeSetter(
+    "holidays",
+    "school_holidays",
+    holidayToDb,
+    holidayFromDb,
+    setRawHolidays,
+  );
+  const setStaffLicences = makeSetter(
+    "staffLicences",
+    "staff_licences",
+    staffLicenceToDb,
+    staffLicenceFromDb,
+    setRawStaffLicences,
+    { sort: byCreatedAsc },
+  );
+  const setStaffTraining = makeSetter(
+    "staffTraining",
+    "staff_training",
+    staffTrainingToDb,
+    staffTrainingFromDb,
+    setRawStaffTraining,
+    { sort: byCreatedAsc },
+  );
+  const setPortalTokens = makeSetter(
+    "portalTokens",
+    "staff_portal_tokens",
+    portalTokenToDb,
+    portalTokenFromDb,
+    setRawPortalTokens,
+  );
+  const setSubmissions = makeSetter(
+    "submissions",
+    "staff_invoice_submissions",
+    submissionToDb,
+    submissionFromDb,
+    setRawSubmissions,
+  );
+  const setApplications = makeSetter(
+    "applications",
+    "staff_applications",
+    applicationToDb,
+    applicationFromDb,
+    setRawApplications,
+    { ownerCol: "target_user_id" },
+  );
+  const setBillingRecipients = makeSetter(
+    "billingRecipients",
+    "billing_recipients",
+    billingRecipientToDb,
+    billingRecipientFromDb,
+    setRawBillingRecipients,
+    { ownerCol: "owner_user_id", sort: byCreatedAsc },
+  );
+
+  const saveStaff = makeSetter(
+    "staff",
+    "staff",
+    staffToDb,
+    staffFromDb,
+    setRawStaff,
+    { entity: "staff", sort: byCreatedAsc },
+  );
+  const setStaff = async (data, audit) => {
+    const ok = await saveStaff(data, audit);
+    if (!ok) return false;
     // Keep portal token staff names in sync with staff name changes
-    const needsUpdate = portalTokens.some((token) => {
+    const tokens = latest.current.portalTokens || [];
+    const needsUpdate = tokens.some((token) => {
       const match = data.find((s) => s.id === token.staffId);
       return match && match.name !== token.staffName;
     });
     if (needsUpdate) {
-      const updatedTokens = portalTokens.map((token) => {
-        const match = data.find((s) => s.id === token.staffId);
-        return match ? { ...token, staffName: match.name } : token;
-      });
-      setRawPortalTokens(updatedTokens);
-      await syncTable(
-        "staff_portal_tokens",
-        updatedTokens,
-        portalTokenToDb,
-        effectiveUserId,
+      return setPortalTokens(
+        tokens.map((token) => {
+          const match = data.find((s) => s.id === token.staffId);
+          return match ? { ...token, staffName: match.name } : token;
+        }),
       );
     }
-
-    if (audit)
-      await addAuditEntry(
-        audit.action,
-        "staff",
-        audit.id,
-        audit.label,
-        audit.changes,
-      );
-  };
-  const setPayments = async (data, audit) => {
-    setRawPayments(data);
-    await syncTable("payments", data, paymentToDb, effectiveUserId);
-    if (audit)
-      await addAuditEntry(
-        audit.action,
-        "payment",
-        audit.id,
-        audit.label,
-        audit.changes,
-      );
-  };
-  const setRemittances = async (data) => {
-    setRawRemittances(data);
-    await syncTable("remittances", data, remittanceToDb, effectiveUserId);
-  };
-
-  const setAllocations = async (data) => {
-    setRawAllocations(data);
-    await syncTable("allocations", data, allocationToDb, effectiveUserId);
-  };
-  const setPoHistory = async (data) => {
-    setRawPoHistory(data);
-    await syncTable("po_history", data, poHistoryToDb, effectiveUserId);
-  };
-
-  const setPupils = async (data) => {
-    setRawPupils(data);
-    await syncTable("children", data, childToDb, effectiveUserId);
-  };
-
-  const setAttendance = async (data) => {
-    setRawAttendance(data);
-    const { base, apikey, token } = getAuthHeaders();
-    if (!token) return;
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      apikey,
-      "Content-Type": "application/json",
-      Prefer: "return=minimal,resolution=merge-duplicates",
-    };
-    if (data.length === 0) {
-      await fetch(`${base}/rest/v1/attendance?user_id=eq.${effectiveUserId}`, {
-        method: "DELETE",
-        headers,
-      });
-      return;
-    }
-    const rows = data.map((a) => attendanceToDb(a, effectiveUserId));
-    const chunkSize = 50;
-    for (let i = 0; i < rows.length; i += chunkSize) {
-      const chunk = rows.slice(i, i + chunkSize);
-      const res = await fetch(`${base}/rest/v1/attendance`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(chunk),
-      });
-      if (!res.ok) console.error("attendance upsert error:", await res.text());
-    }
+    return true;
   };
 
   const deleteAttendanceRecords = async (ids) => {
-    if (!ids || ids.length === 0) return;
-    const { base, apikey, token } = getAuthHeaders();
-    if (!token) return;
-    const headers = { Authorization: `Bearer ${token}`, apikey };
-    await fetch(
-      `${base}/rest/v1/attendance?id=in.(${ids.join(",")})&user_id=eq.${effectiveUserId}`,
-      { method: "DELETE", headers },
-    );
-  };
-
-  const setHolidays = async (data) => {
-    setRawHolidays(data);
-    await syncTable("school_holidays", data, holidayToDb, effectiveUserId);
-  };
-
-  const setStaffLicences = async (data) => {
-    setRawStaffLicences(data);
-    await syncTable("staff_licences", data, staffLicenceToDb, effectiveUserId);
-  };
-
-  const setStaffTraining = async (data) => {
-    setRawStaffTraining(data);
-    await syncTable("staff_training", data, staffTrainingToDb, effectiveUserId);
-  };
-
-  const setPortalTokens = async (data) => {
-    setRawPortalTokens(data);
-    await syncTable(
-      "staff_portal_tokens",
-      data,
-      portalTokenToDb,
-      effectiveUserId,
-    );
-  };
-
-  const setSubmissions = async (data) => {
-    setRawSubmissions(data);
-    await syncTable(
-      "staff_invoice_submissions",
-      data,
-      submissionToDb,
-      effectiveUserId,
-    );
-  };
-
-  const setApplications = async (data) => {
-    setRawApplications(data);
-    // Find deleted records by comparing with current state
-    const currentIds = new Set(data.map((a) => a.id));
-    const deletedIds = applications
-      .filter((a) => !currentIds.has(a.id))
-      .map((a) => a.id);
-    const { base, apikey, token } = getAuthHeaders();
-    if (!token) return;
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      apikey,
-      "Content-Type": "application/json",
-      Prefer: "return=minimal",
-    };
-    for (const id of deletedIds) {
-      await fetch(`${base}/rest/v1/staff_applications?id=eq.${id}`, {
-        method: "DELETE",
-        headers,
-      });
+    if (!ids || ids.length === 0) return true;
+    for (let i = 0; i < ids.length; i += DELETE_CHUNK) {
+      const { error } = await supabase
+        .from("attendance")
+        .delete()
+        .eq("user_id", effectiveUserId)
+        .in("id", ids.slice(i, i + DELETE_CHUNK));
+      if (error) {
+        console.error("attendance delete failed:", error);
+        toast.error("Attendance records weren't deleted. Please try again.");
+        return false;
+      }
     }
-    if (data.length === 0) return;
-    const rows = data.map((a) => applicationToDb(a, effectiveUserId));
-    const res = await fetch(`${base}/rest/v1/staff_applications`, {
-      method: "POST",
-      headers: {
-        ...headers,
-        Prefer: "return=minimal,resolution=merge-duplicates",
-      },
-      body: JSON.stringify(rows),
-    });
-    if (!res.ok) console.error("applications upsert error:", await res.text());
+    return true;
   };
 
   const addAuditEntry = async (
@@ -1259,62 +1274,27 @@ export function AppProvider({ children }) {
       changes,
       createdAt: Date.now(),
     };
-    const newLog = [entry, ...auditLog];
-    setRawAuditLog(newLog);
-    const { base, apikey, token } = getAuthHeaders();
-    if (token) {
-      await fetch(`${base}/rest/v1/audit_log`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          apikey,
-          "Content-Type": "application/json",
-          Prefer: "return=minimal",
-        },
-        body: JSON.stringify(auditToDb(entry, effectiveUserId)),
-      });
-    }
-  };
-  const setSettings = async (data) => {
-    setRawSettings(data);
-    await syncSettings(data, effectiveUserId);
+    setRawAuditLog((log) => [entry, ...log]);
+    const { error } = await supabase
+      .from("audit_log")
+      .insert(auditToDb(entry, effectiveUserId));
+    if (error) console.error("audit_log insert failed:", error);
   };
 
-  const setBillingRecipients = async (data) => {
-    setRawBillingRecipients(data);
-    const { base, apikey, token } = getAuthHeaders();
-    if (!token) return;
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      apikey,
-      "Content-Type": "application/json",
-      Prefer: "return=minimal,resolution=merge-duplicates",
-    };
-    if (data.length > 0) {
-      const res = await fetch(`${base}/rest/v1/billing_recipients`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(
-          data.map((r) => billingRecipientToDb(r, effectiveUserId)),
-        ),
-      });
-      if (!res.ok) {
-        console.error("billing_recipients upsert failed:", await res.text());
-        return;
-      }
-    }
-    const currentIds = data.map((r) => r.id);
-    if (currentIds.length > 0) {
-      await fetch(
-        `${base}/rest/v1/billing_recipients?owner_user_id=eq.${effectiveUserId}&id=not.in.(${currentIds.join(",")})`,
-        { method: "DELETE", headers },
+  const setSettings = async (data) => {
+    setRawSettings(data);
+    const { error } = await supabase
+      .from("settings")
+      .upsert(
+        { id: effectiveUserId, user_id: effectiveUserId, data },
+        { onConflict: "id" },
       );
-    } else {
-      await fetch(
-        `${base}/rest/v1/billing_recipients?owner_user_id=eq.${effectiveUserId}`,
-        { method: "DELETE", headers },
-      );
+    if (error) {
+      console.error("settings save failed:", error);
+      toast.error("Settings didn't save. Please try again.");
+      return false;
     }
+    return true;
   };
 
   if (loading) {
