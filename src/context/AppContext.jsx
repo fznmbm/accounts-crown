@@ -1071,17 +1071,18 @@ export function AppProvider({ children }) {
       );
       if (error) {
         console.error(`save ${table} failed:`, error);
+        toast.dismiss(); // remove any "saved" message the page already showed
         toast.error(
-          "Your change didn't save. The latest data has been reloaded — please try again.",
+          "Your change didn't save. Check your connection and try again.",
           { duration: 10000 },
         );
+        // Show what is really in the database; if that can't load either
+        // (e.g. offline), put the screen back to how it was before the edit
         const { data } = await fetchAll(table, ownerCol, effectiveUserId);
-        if (data) {
-          const fresh = data.map(fromDb);
-          if (sort) fresh.sort(sort);
-          latest.current[key] = fresh;
-          setRaw(fresh);
-        }
+        const restored = data ? data.map(fromDb) : prev;
+        if (data && sort) restored.sort(sort);
+        latest.current[key] = restored;
+        setRaw(restored);
         return false;
       }
       if (audit && entity)
