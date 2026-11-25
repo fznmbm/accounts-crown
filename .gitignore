@@ -1,4 +1,6 @@
 node_modules
 dist
-.env
-.env.local
+# Environment files — never commit (any name starting .env)
+.env*
+!.env.example
+
