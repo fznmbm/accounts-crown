@@ -774,6 +774,25 @@ async function saveDiff(
 
 const byCreatedAsc = (a, b) => (a.createdAt || 0) - (b.createdAt || 0);
 const byCreatedDesc = (a, b) => (b.createdAt || 0) - (a.createdAt || 0);
+
+// ── Save-aware success messages ─────────────────────────────────────────────
+// Pages show "saved" straight after starting a save. While any save is still
+// running, a success message now waits for it, and only appears if it worked.
+const pendingSaves = new Set();
+function trackSave(promise) {
+  pendingSaves.add(promise);
+  promise.finally(() => pendingSaves.delete(promise)).catch(() => {});
+  return promise;
+}
+const showSuccess = toast.success;
+toast.success = (message, options) => {
+  if (pendingSaves.size === 0) return showSuccess(message, options);
+  Promise.all([...pendingSaves])
+    .then((results) => {
+      if (results.every((ok) => ok !== false)) showSuccess(message, options);
+    })
+    .catch(() => {});
+};
 // ── Context ──────────────────────────────────────────────────────────────────
 const AppContext = createContext(null);
 
@@ -1056,7 +1075,7 @@ export function AppProvider({ children }) {
       entity = null,
       sort = null,
     } = opts;
-    return async (next, audit) => {
+    const save = async (next, audit) => {
       const prev = latest.current[key] || [];
       latest.current[key] = next;
       setRaw(next);
@@ -1071,7 +1090,7 @@ export function AppProvider({ children }) {
       );
       if (error) {
         console.error(`save ${table} failed:`, error);
-        toast.dismiss(); // remove any "saved" message the page already showed
+        //toast.dismiss(); // remove any "saved" message the page already showed
         toast.error(
           "Your change didn't save. Check your connection and try again.",
           { duration: 10000 },
@@ -1095,6 +1114,8 @@ export function AppProvider({ children }) {
         );
       return true;
     };
+    // Register the save straight away, so a "saved" message waits for it
+    return (next, audit) => trackSave(save(next, audit));
   };
 
   const setRoutes = makeSetter(
@@ -1242,7 +1263,7 @@ export function AppProvider({ children }) {
     return true;
   };
 
-  const deleteAttendanceRecords = async (ids) => {
+  const removeAttendance = async (ids) => {
     if (!ids || ids.length === 0) return true;
     for (let i = 0; i < ids.length; i += DELETE_CHUNK) {
       const { error } = await supabase
@@ -1258,6 +1279,7 @@ export function AppProvider({ children }) {
     }
     return true;
   };
+  const deleteAttendanceRecords = (ids) => trackSave(removeAttendance(ids));
 
   const addAuditEntry = async (
     action,
@@ -1282,7 +1304,7 @@ export function AppProvider({ children }) {
     if (error) console.error("audit_log insert failed:", error);
   };
 
-  const setSettings = async (data) => {
+  const saveSettings = async (data) => {
     setRawSettings(data);
     const { error } = await supabase
       .from("settings")
@@ -1297,6 +1319,7 @@ export function AppProvider({ children }) {
     }
     return true;
   };
+  const setSettings = (data) => trackSave(saveSettings(data));
 
   if (loading) {
     return (
