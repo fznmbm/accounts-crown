@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { CONFIG } from "../config";
-import { getOwnerUserId } from "../lib/getOwnerUserId";
+//import { getOwnerUserId } from "../lib/getOwnerUserId";
 
 const uid = () => `${Date.now()}_${Math.random().toString(36).substr(2, 7)}`;
 
@@ -86,7 +86,7 @@ export default function StaffPortal() {
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [ownerId, setOwnerId] = useState(null);
+  //const [ownerId, setOwnerId] = useState(null);
   const [staffData, setStaffData] = useState(null);
 
   const formatRole = (type) => {
@@ -123,9 +123,9 @@ export default function StaffPortal() {
   const [showReview, setShowReview] = useState(false);
 
   // ── Fetch owner ID ────────────────────────────────────────────────────────
-  useEffect(() => {
-    getOwnerUserId().then(setOwnerId);
-  }, []);
+  // useEffect(() => {
+  //   getOwnerUserId().then(setOwnerId);
+  // }, []);
 
   // ── Fetch staff details for Your Details section ──────────────────────────
   useEffect(() => {
@@ -144,12 +144,11 @@ export default function StaffPortal() {
   // ── Load token ────────────────────────────────────────────────────────────
   useEffect(() => {
     async function loadToken() {
-      const { data, error } = await supabase
-        .from("staff_portal_tokens")
-        .select("*")
-        .eq("token", token)
-        .eq("active", true)
-        .maybeSingle();
+      // Looked up through a database function — the portal can't list tokens
+      const { data: rows, error } = await supabase.rpc("portal_get_token", {
+        p_token: token,
+      });
+      const data = rows?.[0];
       if (error || !data) {
         setError(
           "This link is invalid or has been deactivated. Please contact your manager.",
@@ -166,14 +165,13 @@ export default function StaffPortal() {
   useEffect(() => {
     if (!tokenData) return;
     async function checkSubmission() {
-      const { data } = await supabase
-        .from("staff_invoice_submissions")
-        .select("id, status")
-        .eq("token_id", tokenData.id)
-        .eq("month", month)
-        .eq("year", year)
-        .maybeSingle();
-      setExistingSubmission(data || null);
+      const { data: rows } = await supabase.rpc("portal_get_submission", {
+        p_token: token,
+        p_month: month,
+        p_year: year,
+      });
+      const data = rows?.[0] || null;
+      setExistingSubmission(data);
       setAlreadySubmitted(!!data && data.status !== "recalled");
     }
     checkSubmission();
@@ -331,15 +329,10 @@ export default function StaffPortal() {
         amount: parseFloat(c.amount) || 0,
       }));
 
-      const record = {
-        id: uid(),
-        token_id: tokenData.id,
-        //user_id: CONFIG.ownerUserId,
-        user_id: ownerId,
-        staff_id: tokenData.staff_id,
+      // Saved through a database function: it checks the link, sets the
+      // company and staff member itself, and blocks duplicate submissions
+      const payload = {
         staff_name: staffData?.name || tokenData.staff_name,
-        month,
-        year,
         route_entries: routePayload,
         cover_entries: coverPayload,
         days_confirmed: routeEntries.reduce(
@@ -349,31 +342,35 @@ export default function StaffPortal() {
             r.weekendEntries.filter((e) => e.date).length,
           0,
         ),
-        invoice_number: null,
         invoice_amount: grandTotal,
         period_from: periodFrom,
         period_to: periodTo,
         signature_name: signatureName,
         signature_date: signatureDate,
-        notes: null,
-        status: "submitted",
-        submitted_at: Date.now(),
-        approved_at: null,
-        payment_id: null,
-        created_at: Date.now(),
       };
 
-      const { error } =
-        existingSubmission?.status === "recalled"
-          ? await supabase
-              .from("staff_invoice_submissions")
-              .update({ ...record, id: undefined })
-              .eq("id", existingSubmission.id)
-          : await supabase.from("staff_invoice_submissions").insert(record);
+      const { error } = await supabase.rpc("portal_submit_invoice", {
+        p_token: token,
+        p_month: month,
+        p_year: year,
+        p_payload: payload,
+      });
       if (error) throw error;
       setSubmitted(true);
     } catch (err) {
-      alert("Submission failed: " + (err.message || "Please try again."));
+      const friendly = {
+        invalid_link:
+          "This link is invalid or has been deactivated. Please contact your manager.",
+        already_submitted:
+          "An invoice for this month has already been submitted.",
+        invalid_amount:
+          "The total doesn't look right. Please check the amounts.",
+        invalid_period: "Please check the month and year.",
+      }[err.message];
+      alert(
+        "Submission failed: " +
+          (friendly || err.message || "Please try again."),
+      );
     }
     setSubmitting(false);
   };
