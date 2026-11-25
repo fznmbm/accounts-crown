@@ -22,12 +22,9 @@ export default function Signup() {
 
   const checkIfMember = async (email) => {
     if (!email || !email.includes("@")) return;
-    const { data } = await supabase
-      .from("workspace_members")
-      .select("id")
-      .eq("member_email", email.toLowerCase())
-      .maybeSingle();
-    setIsMember(!!data);
+    // Checked through a database function — the member list itself is not readable
+    const { data } = await supabase.rpc("is_invited", { p_email: email });
+    setIsMember(data === true);
   };
 
   // Auto-check when email changes (handles autofill)
