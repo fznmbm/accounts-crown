@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
@@ -57,6 +58,50 @@ function MoonIcon() {
     >
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
     </svg>
+  );
+}
+
+// Shows whether changes are saving, saved or failed — always visible in the sidebar
+function SaveIndicator() {
+  const { saveState } = useApp();
+  const [justSaved, setJustSaved] = useState(false);
+
+  // Highlight "All changes saved" for 3 seconds after each successful save
+  useEffect(() => {
+    if (saveState.pending > 0 || saveState.failed || !saveState.at) return;
+    setJustSaved(true);
+    const t = setTimeout(() => setJustSaved(false), 3000);
+    return () => clearTimeout(t);
+  }, [saveState.pending, saveState.failed, saveState.at]);
+
+  if (!saveState.at) return null; // nothing saved yet this session
+
+  let dot, text, textClass;
+  if (saveState.pending > 0) {
+    dot = "bg-amber-400 animate-pulse";
+    text = "Saving…";
+    textClass = "text-amber-600 dark:text-amber-400";
+  } else if (saveState.failed) {
+    dot = "bg-red-500";
+    text = "Last change not saved";
+    textClass = "text-red-600 dark:text-red-400 font-medium";
+  } else {
+    dot = "bg-green-500";
+    text = "All changes saved";
+    textClass = justSaved
+      ? "text-green-600 dark:text-green-400"
+      : "text-gray-400 dark:text-gray-500";
+  }
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex items-center gap-2 px-3 py-1.5 text-xs"
+    >
+      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
+      <span className={`transition-colors ${textClass}`}>{text}</span>
+    </div>
   );
 }
 
@@ -172,6 +217,9 @@ export default function Layout() {
               {dark ? <SunIcon /> : <MoonIcon />}
             </span>
           </button>
+
+          {/* Save status */}
+          <SaveIndicator />
 
           {/* User + logout */}
           <div className="px-3 py-2 border-t border-gray-100 dark:border-gray-800 mt-1 pt-3">
