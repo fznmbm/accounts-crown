@@ -1077,6 +1077,16 @@ export function AppProvider({ children }) {
     } = opts;
     const save = async (next, audit) => {
       const prev = latest.current[key] || [];
+      // Offline: don't change the screen at all, say so straight away
+      if (!navigator.onLine) {
+        toast.error(
+          "You're offline — your change wasn't saved. Reconnect and try again.",
+          {
+            duration: 10000,
+          },
+        );
+        return false;
+      }
       latest.current[key] = next;
       setRaw(next);
       const { error } = await saveDiff(
@@ -1090,18 +1100,24 @@ export function AppProvider({ children }) {
       );
       if (error) {
         console.error(`save ${table} failed:`, error);
-        //toast.dismiss(); // remove any "saved" message the page already showed
+        // Put the screen back straight away
+        latest.current[key] = prev;
+        setRaw(prev);
         toast.error(
           "Your change didn't save. Check your connection and try again.",
-          { duration: 10000 },
+          {
+            duration: 10000,
+          },
         );
-        // Show what is really in the database; if that can't load either
-        // (e.g. offline), put the screen back to how it was before the edit
-        const { data } = await fetchAll(table, ownerCol, effectiveUserId);
-        const restored = data ? data.map(fromDb) : prev;
-        if (data && sort) restored.sort(sort);
-        latest.current[key] = restored;
-        setRaw(restored);
+        // Then refresh from the database in the background, in case part of
+        // it did save — only if nothing else has changed this table since
+        fetchAll(table, ownerCol, effectiveUserId).then(({ data }) => {
+          if (!data || latest.current[key] !== prev) return;
+          const fresh = data.map(fromDb);
+          if (sort) fresh.sort(sort);
+          latest.current[key] = fresh;
+          setRaw(fresh);
+        });
         return false;
       }
       if (audit && entity)
@@ -1265,6 +1281,12 @@ export function AppProvider({ children }) {
 
   const removeAttendance = async (ids) => {
     if (!ids || ids.length === 0) return true;
+    if (!navigator.onLine) {
+      toast.error(
+        "You're offline — attendance wasn't deleted. Reconnect and try again.",
+      );
+      return false;
+    }
     for (let i = 0; i < ids.length; i += DELETE_CHUNK) {
       const { error } = await supabase
         .from("attendance")
@@ -1305,6 +1327,13 @@ export function AppProvider({ children }) {
   };
 
   const saveSettings = async (data) => {
+    if (!navigator.onLine) {
+      toast.error(
+        "You're offline — settings weren't saved. Reconnect and try again.",
+      );
+      return false;
+    }
+    const prevSettings = settings;
     setRawSettings(data);
     const { error } = await supabase
       .from("settings")
@@ -1314,6 +1343,7 @@ export function AppProvider({ children }) {
       );
     if (error) {
       console.error("settings save failed:", error);
+      setRawSettings(prevSettings);
       toast.error("Settings didn't save. Please try again.");
       return false;
     }
