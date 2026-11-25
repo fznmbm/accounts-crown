@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
-import { supabase, AUTH_STORAGE_KEY } from "../lib/supabase";
+import { toast } from "sonner";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
+import { useConfirm } from "../context/ConfirmContext";
 import { fmt, fmtD } from "../lib/utils";
 
 const PLANS = ["trial", "starter", "standard", "pro", "owner"];
@@ -47,43 +50,48 @@ export default function AdminLicences() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
-  const [adminKey, setAdminKey] = useState("");
-  const [unlocked, setUnlocked] = useState(false);
-  const [keyError, setKeyError] = useState("");
+  const { user } = useAuth();
+  const showConfirm = useConfirm();
 
-  // Simple admin PIN protection
-  const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN || "crown-admin-2026";
-
-  const unlock = () => {
-    if (adminKey === ADMIN_PIN) {
-      setUnlocked(true);
-      loadLicences();
-    } else {
-      setKeyError("Incorrect admin key");
-    }
-  };
-
-  const base = import.meta.env.VITE_SUPABASE_URL;
-  const apikey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  const getToken = () => {
-    try {
-      return JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY))?.access_token;
-    } catch {
-      return apikey;
-    }
-  };
+  // Only the platform owner sees this page. The database (RLS policy
+  // platform_admin_write) is what actually enforces it.
+  const PLATFORM_ADMIN_ID = import.meta.env.VITE_PLATFORM_ADMIN_USER_ID;
+  const isPlatformAdmin = !!PLATFORM_ADMIN_ID && user?.id === PLATFORM_ADMIN_ID;
 
   const loadLicences = async () => {
     setLoading(true);
-    const token = getToken();
-    const res = await fetch(
-      `${base}/rest/v1/licences?select=*&order=created_at.desc`,
-      { headers: { apikey, Authorization: `Bearer ${token}` } },
-    );
-    const data = await res.json();
-    setLicences(Array.isArray(data) ? data : []);
+    const { data, error } = await supabase
+      .from("licences")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.error("licences load failed:", error);
+      toast.error("Licences didn't load. Refresh to try again.");
+    }
+    setLicences(data || []);
     setLoading(false);
+  };
+
+  useEffect(() => {
+    if (isPlatformAdmin) loadLicences();
+  }, [isPlatformAdmin]);
+
+  // Runs one change. A change blocked by RLS returns no rows rather than an
+  // error, so "0 rows" is treated as a failure too.
+  const run = async (query, successMsg) => {
+    const { data, error } = await query.select("id");
+    if (error || !data?.length) {
+      console.error("licence change failed:", error);
+      toast.error(
+        error
+          ? `Not saved: ${error.message}`
+          : "Not saved — you don't have permission.",
+      );
+      return false;
+    }
+    toast.success(successMsg);
+    await loadLicences();
+    return true;
   };
 
   const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
@@ -113,68 +121,49 @@ export default function AdminLicences() {
       id: editing?.id || `client-${Date.now()}`,
       created_at: editing?.created_at || Date.now(),
     };
-    const token = getToken();
-    const headers = {
-      apikey,
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    };
-    if (editing) {
-      await fetch(`${base}/rest/v1/licences?id=eq.${editing.id}`, {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify(record),
-      });
-    } else {
-      await fetch(`${base}/rest/v1/licences`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(record),
-      });
-    }
-    await loadLicences();
+    const ok = editing
+      ? await run(
+          supabase.from("licences").update(record).eq("id", editing.id),
+          "Licence updated.",
+        )
+      : await run(supabase.from("licences").insert(record), "Licence added.");
     setSaving(false);
-    close();
+    if (ok) close(); // on failure the form stays open with your changes
   };
 
   const suspend = async (id) => {
-    if (!confirm("Suspend this client? They will immediately lose access."))
-      return;
-    const token = getToken();
-    await fetch(`${base}/rest/v1/licences?id=eq.${id}`, {
-      method: "PATCH",
-      headers: {
-        apikey,
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ status: "suspended" }),
+    const yes = await showConfirm({
+      title: "Suspend this client?",
+      message: "They will immediately lose access.",
+      type: "danger",
+      confirmLabel: "Suspend",
     });
-    await loadLicences();
+    if (!yes) return;
+    await run(
+      supabase.from("licences").update({ status: "suspended" }).eq("id", id),
+      "Client suspended.",
+    );
   };
 
   const activate = async (id) => {
-    const token = getToken();
-    await fetch(`${base}/rest/v1/licences?id=eq.${id}`, {
-      method: "PATCH",
-      headers: {
-        apikey,
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ status: "active" }),
-    });
-    await loadLicences();
+    await run(
+      supabase.from("licences").update({ status: "active" }).eq("id", id),
+      "Client activated.",
+    );
   };
 
   const del = async (id) => {
-    if (!confirm("Delete this licence? This cannot be undone.")) return;
-    const token = getToken();
-    await fetch(`${base}/rest/v1/licences?id=eq.${id}`, {
-      method: "DELETE",
-      headers: { apikey, Authorization: `Bearer ${token}` },
+    const yes = await showConfirm({
+      title: "Delete this licence?",
+      message: "This cannot be undone.",
+      type: "danger",
+      confirmLabel: "Delete",
     });
-    await loadLicences();
+    if (!yes) return;
+    await run(
+      supabase.from("licences").delete().eq("id", id),
+      "Licence deleted.",
+    );
   };
 
   // Stats
@@ -186,44 +175,17 @@ export default function AdminLicences() {
     return days > 0 && days < 30;
   }).length;
 
-  // ── Admin PIN screen ──────────────────────────────────────────
-  if (!unlocked) {
+  // ── Not the platform owner ────────────────────────────────────
+  if (!isPlatformAdmin) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 p-4">
-        <div className="w-full max-w-sm">
-          <div className="card p-6 space-y-4">
-            <div className="text-center">
-              <div className="text-3xl mb-2">🔐</div>
-              <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                Admin Access
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Licence management — authorised personnel only
-              </p>
-            </div>
-            <div className="space-y-1">
-              <label className="label">Admin key</label>
-              <input
-                className="input"
-                type="password"
-                value={adminKey}
-                onChange={(e) => {
-                  setAdminKey(e.target.value);
-                  setKeyError("");
-                }}
-                onKeyDown={(e) => e.key === "Enter" && unlock()}
-                placeholder="Enter admin key…"
-                autoFocus
-              />
-              {keyError && <p className="text-xs text-red-500">{keyError}</p>}
-            </div>
-            <button
-              className="btn-primary w-full justify-center"
-              onClick={unlock}
-            >
-              Unlock
-            </button>
-          </div>
+      <div className="min-h-full flex items-center justify-center p-4">
+        <div className="card p-6 max-w-sm text-center space-y-2">
+          <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+            Not available
+          </h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Licence management is only available to the platform owner.
+          </p>
         </div>
       </div>
     );
