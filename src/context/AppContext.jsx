@@ -779,9 +779,30 @@ const byCreatedDesc = (a, b) => (b.createdAt || 0) - (a.createdAt || 0);
 // Pages show "saved" straight after starting a save. While any save is still
 // running, a success message now waits for it, and only appears if it worked.
 const pendingSaves = new Set();
+// Listeners for the header save indicator (Saving… / Saved / Not saved)
+const saveListeners = new Set();
+let lastSaveFailed = false;
+function notifySave() {
+  const state = { pending: pendingSaves.size, failed: lastSaveFailed };
+  saveListeners.forEach((fn) => fn(state));
+}
 function trackSave(promise) {
+  if (pendingSaves.size === 0) lastSaveFailed = false; // a new round of saving
   pendingSaves.add(promise);
-  promise.finally(() => pendingSaves.delete(promise)).catch(() => {});
+  notifySave();
+  promise
+    .then(
+      (ok) => {
+        if (ok === false) lastSaveFailed = true;
+      },
+      () => {
+        lastSaveFailed = true;
+      },
+    )
+    .finally(() => {
+      pendingSaves.delete(promise);
+      notifySave();
+    });
   return promise;
 }
 const showSuccess = toast.success;
@@ -818,6 +839,29 @@ export function AppProvider({ children }) {
   const [applications, setRawApplications] = useState([]);
   const [billingRecipients, setRawBillingRecipients] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // ── Save indicator state (shown in the header by Layout) ──────────────────
+  const [saveState, setSaveState] = useState({
+    pending: 0,
+    failed: false,
+    at: null,
+  });
+  useEffect(() => {
+    const onChange = (state) => setSaveState({ ...state, at: Date.now() });
+    saveListeners.add(onChange);
+    return () => saveListeners.delete(onChange);
+  }, []);
+
+  // Warn before closing or reloading the tab while a save is still running
+  useEffect(() => {
+    if (saveState.pending === 0) return;
+    const warn = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [saveState.pending]);
 
   // ── Load all data on mount ─────────────────────────────────────────────────
   const hasLoadedRef = useRef(false);
@@ -1364,6 +1408,7 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider
       value={{
+        saveState,
         routes,
         setRoutes,
         invoices,
