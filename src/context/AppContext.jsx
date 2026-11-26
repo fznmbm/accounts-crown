@@ -718,6 +718,14 @@ const DELETE_CHUNK = 100;
 
 // Load every row for a workspace, 1,000 at a time, so tables of any size load in full.
 // On any error returns data: null, so a half-loaded table is never used.
+// Last known updated_at for every row this browser has loaded or saved,
+// keyed "table:id". Used to spot when someone else changed a row first.
+const serverVersions = new Map();
+const rememberVersions = (table, rows) =>
+  rows.forEach((r) => {
+    if (r.updated_at) serverVersions.set(`${table}:${r.id}`, r.updated_at);
+  });
+
 async function fetchAll(table, ownerCol, ownerId) {
   const rows = [];
   for (let from = 0; ; from += PAGE_SIZE) {
@@ -729,7 +737,10 @@ async function fetchAll(table, ownerCol, ownerId) {
       .range(from, from + PAGE_SIZE - 1);
     if (error) return { data: null, error };
     rows.push(...data);
-    if (data.length < PAGE_SIZE) return { data: rows, error: null };
+    if (data.length < PAGE_SIZE) {
+      rememberVersions(table, rows);
+      return { data: rows, error: null };
+    }
   }
 }
 
@@ -752,14 +763,35 @@ async function saveDiff(
     ? prev.filter((r) => !nextIds.has(r.id)).map((r) => r.id)
     : [];
 
+  // Conflict check: for rows being edited (not new ones), make sure nobody
+  // else has changed or deleted them since this browser loaded them
+  const editedIds = changed.filter((r) => prevById.has(r.id)).map((r) => r.id);
+  for (let i = 0; i < editedIds.length; i += DELETE_CHUNK) {
+    const ids = editedIds.slice(i, i + DELETE_CHUNK);
+    const { data, error } = await supabase
+      .from(table)
+      .select("id, updated_at")
+      .in("id", ids);
+    if (error) return { error };
+    const current = new Map(data.map((r) => [r.id, r.updated_at]));
+    const clash = ids.some((id) => {
+      const known = serverVersions.get(`${table}:${id}`);
+      if (!known) return false; // no version on record — can't tell, allow
+      return current.get(id) !== known; // changed or deleted elsewhere
+    });
+    if (clash) return { error: { conflict: true } };
+  }
+
   for (let i = 0; i < changed.length; i += UPSERT_CHUNK) {
     const rows = changed
       .slice(i, i + UPSERT_CHUNK)
       .map((r) => toDb(r, ownerId));
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from(table)
-      .upsert(rows, { onConflict: "id" });
+      .upsert(rows, { onConflict: "id" })
+      .select("id, updated_at");
     if (error) return { error };
+    rememberVersions(table, data || []);
   }
   for (let i = 0; i < removed.length; i += DELETE_CHUNK) {
     const { error } = await supabase
@@ -1148,10 +1180,10 @@ export function AppProvider({ children }) {
         latest.current[key] = prev;
         setRaw(prev);
         toast.error(
-          "Your change didn't save. Check your connection and try again.",
-          {
-            duration: 10000,
-          },
+          error.conflict
+            ? "This was changed somewhere else (another person or another tab) since you opened it. The latest version has been loaded — please make your change again."
+            : "Your change didn't save. Check your connection and try again.",
+          { duration: error.conflict ? 15000 : 10000 },
         );
         // Then refresh from the database in the background, in case part of
         // it did save — only if nothing else has changed this table since
