@@ -649,7 +649,7 @@ grant select on public.staff_invoice_submissions    to anon;
 grant update on public.staff_invoice_submissions    to anon;
 grant insert on public.staff_applications           to anon;
 grant select on public.workspace_members            to anon;
-grant execute on function public.get_staff_info_for_portal(text, text) to anon;
+
 
 
 -- ============================================================
@@ -842,3 +842,346 @@ insert into public.licences (
 
 -- added mot_expiry column to staff_licences table for MOT compliance tracking
 alter table staff_licences add column if not exists mot_expiry date;
+
+-- ============================================================
+-- 13. UPDATE 2026-11-26 — security, multi-user, deductions
+-- Safe to run more than once. Also used as the catch-up script
+-- for existing databases (Crown Cars, Sunrise demo, XYZ test).
+-- From now on every database change is added here (or as a new
+-- dated section below) in ALL THREE master files.
+-- ============================================================
+
+-- ── 1. Who-changed-it stamp on every main table ────────────────────────────
+create or replace function public.stamp_row()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at := now();
+  new.updated_by := auth.uid();
+  if tg_op = 'INSERT' then
+    new.created_by := coalesce(new.created_by, auth.uid());
+  else
+    new.created_by := old.created_by;
+  end if;
+  return new;
+end $$;
+
+do $$
+declare
+  t text;
+  tables text[] := array[
+    'routes','invoices','staff','payments','remittances','allocations',
+    'po_history','audit_log','children','attendance','school_holidays',
+    'settings','staff_licences','staff_training','staff_portal_tokens',
+    'staff_invoice_submissions','staff_applications','billing_recipients'];
+begin
+  foreach t in array tables loop
+    if exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = t
+        and ((column_name = 'updated_at' and data_type <> 'timestamp with time zone')
+          or (column_name in ('created_by','updated_by') and data_type <> 'uuid'))
+    ) then
+      raise exception 'Stopped: % already has updated_at/created_by/updated_by of a different type. Nothing was changed.', t;
+    end if;
+  end loop;
+  foreach t in array tables loop
+    execute format('alter table public.%I add column if not exists updated_at timestamptz not null default now()', t);
+    execute format('alter table public.%I add column if not exists created_by uuid default auth.uid()', t);
+    execute format('alter table public.%I add column if not exists updated_by uuid', t);
+    execute format('drop trigger if exists trg_stamp_row on public.%I', t);
+    execute format('create trigger trg_stamp_row before insert or update on public.%I
+                    for each row execute function public.stamp_row()', t);
+  end loop;
+end $$;
+
+-- ── 2. Indexes for per-month loading ───────────────────────────────────────
+create index if not exists attendance_user_month_idx  on public.attendance  (user_id, year, month);
+create index if not exists allocations_user_month_idx on public.allocations (user_id, year, month);
+create index if not exists invoices_user_month_idx    on public.invoices    (user_id, year, month);
+create index if not exists payments_user_month_idx    on public.payments    (user_id, year, month);
+
+-- ── 3. Team members: access by linked login, roles, guard ──────────────────
+alter table public.workspace_members
+  add column if not exists role text not null default 'admin'
+  check (role in ('owner','admin','operations','accounts','viewer'));
+
+create or replace function public.is_workspace_member(owner_id uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.workspace_members
+    where owner_user_id = owner_id and member_user_id = auth.uid()
+  );
+$$;
+
+create or replace function public.workspace_role(owner_id uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select case
+    when owner_id = auth.uid() then 'owner'
+    else (select role from public.workspace_members
+          where owner_user_id = owner_id and member_user_id = auth.uid() limit 1)
+  end;
+$$;
+
+create or replace function public.guard_workspace_member_update()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.owner_user_id is distinct from old.owner_user_id then
+    raise exception 'Not allowed: workspace cannot be changed';
+  end if;
+  if auth.uid() is distinct from old.owner_user_id then
+    if new.member_email is distinct from old.member_email
+       or new.member_user_id is distinct from auth.uid()
+       or new.role is distinct from old.role then
+      raise exception 'Not allowed';
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_guard_workspace_member_update on public.workspace_members;
+create trigger trg_guard_workspace_member_update
+  before update on public.workspace_members
+  for each row execute function public.guard_workspace_member_update();
+
+create or replace function public.is_invited(p_email text)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from workspace_members where member_email = lower(trim(p_email)));
+$$;
+grant execute on function public.is_invited(text) to anon, authenticated;
+
+-- ── 4. Staff portal: database functions are the only way in ────────────────
+create or replace function public.portal_get_token(p_token text)
+returns table(id text, staff_id text, staff_name text)
+language sql stable security definer set search_path = public as $$
+  select t.id::text, t.staff_id::text, t.staff_name::text
+  from staff_portal_tokens t
+  where t.token = p_token and t.active = true
+  limit 1;
+$$;
+
+create or replace function public.portal_get_submission(p_token text, p_month int, p_year int)
+returns table(id text, status text)
+language sql stable security definer set search_path = public as $$
+  select s.id::text, s.status::text
+  from staff_invoice_submissions s
+  join staff_portal_tokens t on t.id = s.token_id
+  where t.token = p_token and t.active = true
+    and s.month::text = p_month::text and s.year::text = p_year::text
+  limit 1;
+$$;
+
+create or replace function public.portal_submit_invoice(
+  p_token text, p_month int, p_year int, p_payload jsonb)
+returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  v_token    staff_portal_tokens%rowtype;
+  v_existing staff_invoice_submissions%rowtype;
+  v_now      bigint  := (extract(epoch from now()) * 1000)::bigint;
+  v_amount   numeric := coalesce((p_payload->>'invoice_amount')::numeric, 0);
+  v_rec      jsonb;
+begin
+  select * into v_token from staff_portal_tokens
+   where token = p_token and active = true limit 1;
+  if not found then raise exception 'invalid_link'; end if;
+
+  if p_year not between 2020 and 2100 or p_month not between 0 and 12 then
+    raise exception 'invalid_period';
+  end if;
+  if v_amount < 0 or v_amount > 100000 then
+    raise exception 'invalid_amount';
+  end if;
+
+  select * into v_existing from staff_invoice_submissions
+   where token_id = v_token.id
+     and month::text = p_month::text and year::text = p_year::text
+   limit 1;
+  if found and v_existing.status <> 'recalled' then
+    raise exception 'already_submitted';
+  end if;
+
+  v_rec := jsonb_build_object(
+    'id',             coalesce(v_existing.id::text, gen_random_uuid()::text),
+    'token_id',       v_token.id,
+    'user_id',        v_token.user_id,
+    'staff_id',       v_token.staff_id,
+    'staff_name',     coalesce(nullif(p_payload->>'staff_name', ''), v_token.staff_name),
+    'month',          p_month,
+    'year',           p_year,
+    'route_entries',  coalesce(p_payload->'route_entries', '[]'::jsonb),
+    'cover_entries',  coalesce(p_payload->'cover_entries', '[]'::jsonb),
+    'days_confirmed', p_payload->'days_confirmed',
+    'invoice_amount', v_amount,
+    'period_from',    p_payload->'period_from',
+    'period_to',      p_payload->'period_to',
+    'signature_name', p_payload->'signature_name',
+    'signature_date', p_payload->'signature_date',
+    'status',         'submitted',
+    'submitted_at',   v_now,
+    'created_at',     coalesce(to_jsonb(v_existing.created_at), to_jsonb(v_now))
+  );
+
+  if v_existing.id is null then
+    insert into staff_invoice_submissions (
+      id, token_id, user_id, staff_id, staff_name, month, year,
+      route_entries, cover_entries, days_confirmed, invoice_amount,
+      period_from, period_to, signature_name, signature_date,
+      notes, status, submitted_at, approved_at, payment_id, created_at)
+    select id, token_id, user_id, staff_id, staff_name, month, year,
+      route_entries, cover_entries, days_confirmed, invoice_amount,
+      period_from, period_to, signature_name, signature_date,
+      notes, status, submitted_at, approved_at, payment_id, created_at
+    from jsonb_populate_record(null::staff_invoice_submissions, v_rec);
+  else
+    update staff_invoice_submissions s set
+      (staff_name, route_entries, cover_entries, days_confirmed, invoice_amount,
+       period_from, period_to, signature_name, signature_date,
+       status, submitted_at, approved_at, payment_id, notes) =
+      (select r.staff_name, r.route_entries, r.cover_entries, r.days_confirmed,
+              r.invoice_amount, r.period_from, r.period_to, r.signature_name,
+              r.signature_date, r.status, r.submitted_at, r.approved_at,
+              r.payment_id, r.notes
+       from jsonb_populate_record(null::staff_invoice_submissions, v_rec) r)
+    where s.id = v_existing.id;
+  end if;
+
+  return v_rec->>'id';
+end $$;
+
+grant execute on function public.portal_get_token(text) to anon, authenticated;
+grant execute on function public.portal_get_submission(text, int, int) to anon, authenticated;
+grant execute on function public.portal_submit_invoice(text, int, int, jsonb) to anon, authenticated;
+
+-- ── 5. Close anonymous access ──────────────────────────────────────────────
+drop policy if exists anon_insert             on public.staff_invoice_submissions;
+drop policy if exists anon_select_by_token    on public.staff_invoice_submissions;
+drop policy if exists anon_update_recalled    on public.staff_invoice_submissions;
+drop policy if exists anon_read_active        on public.staff_portal_tokens;
+drop policy if exists anon_select             on public.staff_portal_tokens;
+drop policy if exists anon_check_member_email on public.workspace_members;
+drop policy if exists anon_check              on public.workspace_members; -- name used in master setup files
+
+-- Anon no longer reads/writes these tables directly (portal uses the functions above)
+revoke select                 on public.staff_portal_tokens       from anon;
+revoke insert, select, update on public.staff_invoice_submissions from anon;
+revoke select                 on public.workspace_members         from anon;
+
+do $$
+begin
+  if exists (select 1 from pg_policies where schemaname = 'public'
+             and tablename = 'staff_applications' and policyname = 'anon_insert') then
+    execute 'alter policy anon_insert on public.staff_applications
+             with check (status = ''pending'' and admin_notes is null)';
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public'
+             and tablename = 'billing_recipients' and policyname = 'workspace_access') then
+    execute 'alter policy workspace_access on public.billing_recipients to authenticated';
+  end if;
+end $$;
+
+-- Duplicate policies (data_access already covers owner + members)
+drop policy if exists owner_all     on public.staff_invoice_submissions;
+drop policy if exists member_select on public.staff_invoice_submissions;
+drop policy if exists member_update on public.staff_invoice_submissions;
+drop policy if exists member_delete on public.staff_invoice_submissions;
+drop policy if exists owner_all     on public.staff_licences;
+drop policy if exists member_select on public.staff_licences;
+drop policy if exists member_update on public.staff_licences;
+drop policy if exists member_delete on public.staff_licences;
+drop policy if exists owner_all     on public.staff_portal_tokens;
+drop policy if exists member_select on public.staff_portal_tokens;
+drop policy if exists member_update on public.staff_portal_tokens;
+drop policy if exists member_delete on public.staff_portal_tokens;
+drop policy if exists owner_all     on public.staff_training;
+drop policy if exists member_select on public.staff_training;
+drop policy if exists member_update on public.staff_training;
+drop policy if exists member_delete on public.staff_training;
+drop policy if exists owner_read    on public.staff_applications;
+drop policy if exists owner_update  on public.staff_applications;
+drop policy if exists owner_delete  on public.staff_applications;
+
+-- ── 6. Deductions (staff charges) ──────────────────────────────────────────
+create table if not exists public.staff_charges (
+  id            text primary key default gen_random_uuid()::text,
+  user_id       uuid not null,
+  staff_id      text,
+  staff_name    text not null,
+  is_external   boolean not null default false,
+  charge_date   date not null default current_date,
+  category      text not null default 'other',
+  description   text,
+  amount        numeric(10,2) not null check (amount > 0),
+  deduct_month  int not null check (deduct_month between 0 and 11),
+  deduct_year   int not null check (deduct_year between 2020 and 2100),
+  group_id      text,
+  instalment_no int not null default 1,
+  instalments   int not null default 1,
+  status        text not null default 'outstanding'
+                check (status in ('outstanding','deducted','waived')),
+  payment_id    text,
+  notes         text,
+  created_at    bigint not null default (extract(epoch from now()) * 1000)::bigint,
+  updated_at    timestamptz not null default now(),
+  created_by    uuid default auth.uid(),
+  updated_by    uuid
+);
+alter table public.staff_charges enable row level security;
+drop policy if exists data_access on public.staff_charges;
+create policy data_access on public.staff_charges
+  for all to authenticated
+  using ((user_id = auth.uid()) or is_workspace_member(user_id))
+  with check ((user_id = auth.uid()) or is_workspace_member(user_id));
+drop trigger if exists trg_stamp_row on public.staff_charges;
+create trigger trg_stamp_row
+  before insert or update on public.staff_charges
+  for each row execute function public.stamp_row();
+create index if not exists staff_charges_user_month_idx
+  on public.staff_charges (user_id, deduct_year, deduct_month);
+
+-- ── 7. Members can link their own login on first sign-in ───────────────────
+-- (AuthContext sets member_user_id; the guard trigger above stops anything else)
+drop policy if exists member_update_own on public.workspace_members;
+create policy member_update_own on public.workspace_members
+  for update to authenticated
+  using (member_email = (auth.jwt() ->> 'email'))
+  with check (member_email = (auth.jwt() ->> 'email'));
+
+-- ── 8. Portal "Your details" — now also returns the name ───────────────────
+drop function if exists public.get_staff_info_for_portal(text, text);
+create function public.get_staff_info_for_portal(p_staff_id text, p_token text)
+returns table(staff_type text, phone text, address text, name text)
+language sql stable security definer set search_path = public as $$
+  select s.type, s.phone, s.address, s.name
+  from public.staff s
+  inner join public.staff_portal_tokens t on t.staff_id = s.id
+  where s.id = p_staff_id and t.token = p_token and t.active = true
+  limit 1;
+$$;
+grant execute on function public.get_staff_info_for_portal(text, text) to anon, authenticated;
+
+-- ── 9. MOT expiry (compliance) ─────────────────────────────────────────────
+alter table public.staff_licences add column if not exists mot_expiry date;
+
+-- ── 10. Licences (PLATFORM / Crown Cars database only) ─────────────────────
+-- Only the platform owner can change licences; sites check their own key
+-- through validate_licence() instead of reading the table.
+-- Platform owner = Fazan's Supabase user id (Authentication → Users).
+drop policy if exists admin_write          on public.licences;
+drop policy if exists platform_admin_write on public.licences;
+create policy platform_admin_write on public.licences
+  for all to authenticated
+  using (auth.uid() = 'f3cf0783-92e2-4269-a7e1-e9b3db6203a3'::uuid)
+  with check (auth.uid() = 'f3cf0783-92e2-4269-a7e1-e9b3db6203a3'::uuid);
+
+create or replace function public.validate_licence(p_key text)
+returns table(client_name text, plan text, status text, expires_at text)
+language sql stable security definer set search_path = public as $$
+  select l.client_name::text, l.plan::text, l.status::text, l.expires_at::text
+  from licences l
+  where l.licence_key = p_key
+  limit 1;
+$$;
+grant execute on function public.validate_licence(text) to anon, authenticated;
+
+-- Nobody reads the licences table directly any more
+drop policy if exists public_read       on public.licences;
+drop policy if exists "public validate" on public.licences;
