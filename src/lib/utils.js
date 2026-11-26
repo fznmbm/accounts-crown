@@ -69,41 +69,51 @@ export const getAllocTotalCost = (a) => {
   );
 };
 
-// Amount earned by a specific staff member from a single allocation
+// Amount earned by a specific staff member from a single allocation.
+// Adds up EVERY role they have on it (main driver, cover, PA, additive
+// bands) — someone can be cover and also get an additive band.
 export const getAllocAmountForStaff = (a, staffId) => {
   if (!staffId) return 0;
-  if (a.regularStaffId === staffId) {
-    let total = a.regularAmount || 0;
-    (a.additiveEntries || [])
-      .filter((e) => e.staffId === staffId)
-      .forEach((e) => {
-        total += Number(e.amount) || 0;
-      });
-    return total;
-  }
+  let total = 0;
+  if (a.regularStaffId === staffId) total += Number(a.regularAmount) || 0;
   if (a.coverEntries?.length > 0) {
-    const entry = a.coverEntries.find((c) => c.staffId === staffId);
-    if (entry) return Number(entry.amount) || 0;
+    a.coverEntries
+      .filter((c) => c.staffId === staffId)
+      .forEach((c) => {
+        total += Number(c.amount) || 0;
+      });
+  } else if (a.tempStaffId === staffId) {
+    total += Number(a.tempAmount) || 0; // older allocations: single cover
   }
-  if (a.paStaffId === staffId) return Number(a.paAmount) || 0;
-  const addE = (a.additiveEntries || []).find((e) => e.staffId === staffId);
-  if (addE) return Number(addE.amount) || 0;
-  return 0;
+  if (a.paStaffId === staffId) total += Number(a.paAmount) || 0;
+  (a.additiveEntries || [])
+    .filter((e) => e.staffId === staffId)
+    .forEach((e) => {
+      total += Number(e.amount) || 0;
+    });
+  return Math.round(total * 100) / 100;
 };
 
-// Human-readable detail string for what a staff member earned from an allocation
+// Human-readable detail of what a staff member earned from an allocation
+// (every role they had on it, joined with " + ")
 export const getAllocDetailForStaff = (a, staffId) => {
   if (!staffId) return "";
+  const parts = [];
   if (a.regularStaffId === staffId)
-    return `${a.regularDays} days × ${fmt(a.regularRate)}`;
+    parts.push(`${a.regularDays} days × ${fmt(a.regularRate)}`);
   if (a.coverEntries?.length > 0) {
-    const e = a.coverEntries.find((c) => c.staffId === staffId);
-    if (e) return `${e.days} days × ${fmt(e.rate)} (cover)`;
+    a.coverEntries
+      .filter((c) => c.staffId === staffId)
+      .forEach((e) => parts.push(`${e.days} days × ${fmt(e.rate)} (cover)`));
+  } else if (a.tempStaffId === staffId) {
+    parts.push(`${a.tempDays} days × ${fmt(a.tempRate)} (cover)`);
   }
   if (a.paStaffId === staffId)
-    return `${a.paDays} days × ${fmt(a.paRate)} (PA)`;
-  const addE = (a.additiveEntries || []).find((e) => e.staffId === staffId);
-  if (addE)
-    return `${addE.days} days × ${fmt(addE.rate)} (${addE.description})`;
-  return "";
+    parts.push(`${a.paDays} days × ${fmt(a.paRate)} (PA)`);
+  (a.additiveEntries || [])
+    .filter((e) => e.staffId === staffId)
+    .forEach((e) =>
+      parts.push(`${e.days} days × ${fmt(e.rate)} (${e.description})`),
+    );
+  return parts.join(" + ");
 };
