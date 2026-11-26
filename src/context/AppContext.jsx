@@ -710,6 +710,49 @@ const billingRecipientToDb = (r, uid) => ({
   created_at: r.createdAt,
 });
 
+// Money a staff member owes back (training, badge renewal, DBS…), taken off
+// a future payment. A charge spread over several months = one row per month,
+// linked by groupId.
+const staffChargeFromDb = (c) => ({
+  id: c.id,
+  staffId: c.staff_id || null,
+  staffName: c.staff_name || "",
+  isExternal: c.is_external || false,
+  chargeDate: c.charge_date,
+  category: c.category || "other",
+  description: c.description || "",
+  amount: Number(c.amount) || 0,
+  deductMonth: c.deduct_month,
+  deductYear: c.deduct_year,
+  groupId: c.group_id || null,
+  instalmentNo: c.instalment_no || 1,
+  instalments: c.instalments || 1,
+  status: c.status || "outstanding",
+  paymentId: c.payment_id || null,
+  notes: c.notes || "",
+  createdAt: c.created_at,
+});
+const staffChargeToDb = (c, uid) => ({
+  id: c.id,
+  user_id: uid,
+  staff_id: c.staffId || null,
+  staff_name: c.staffName || "",
+  is_external: c.isExternal || false,
+  charge_date: c.chargeDate || null,
+  category: c.category || "other",
+  description: c.description || null,
+  amount: Number(c.amount) || 0,
+  deduct_month: c.deductMonth,
+  deduct_year: c.deductYear,
+  group_id: c.groupId || null,
+  instalment_no: c.instalmentNo || 1,
+  instalments: c.instalments || 1,
+  status: c.status || "outstanding",
+  payment_id: c.paymentId || null,
+  notes: c.notes || null,
+  created_at: c.createdAt || Date.now(),
+});
+
 // ── Data helpers — all through the Supabase client, which refreshes the ──────
 // ── login token itself before each request ─────────────────────────────────
 const PAGE_SIZE = 1000; // Supabase returns at most 1,000 rows per request
@@ -870,6 +913,7 @@ export function AppProvider({ children }) {
   const [submissions, setRawSubmissions] = useState([]);
   const [applications, setRawApplications] = useState([]);
   const [billingRecipients, setRawBillingRecipients] = useState([]);
+  const [staffCharges, setRawStaffCharges] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // ── Save indicator state (shown in the header by Layout) ──────────────────
@@ -973,13 +1017,14 @@ export function AppProvider({ children }) {
         setRawHolidays((hol.data || []).map(holidayFromDb));
         if (hol.error) console.error("school_holidays:", hol.error);
 
-        const [lic, trn, tok, sub, app, br] = await Promise.all([
+        const [lic, trn, tok, sub, app, br, chg] = await Promise.all([
           fetchAll("staff_licences", "user_id", uid),
           fetchAll("staff_training", "user_id", uid),
           fetchAll("staff_portal_tokens", "user_id", uid),
           fetchAll("staff_invoice_submissions", "user_id", uid),
           fetchAll("staff_applications", "target_user_id", uid),
           fetchAll("billing_recipients", "owner_user_id", uid),
+          fetchAll("staff_charges", "user_id", uid),
         ]);
         setRawStaffLicences(
           (lic.data || [])
@@ -1005,6 +1050,10 @@ export function AppProvider({ children }) {
             .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)),
         );
         if (br.error) console.error("billing_recipients:", br.error);
+        setRawStaffCharges(
+          (chg.data || []).map(staffChargeFromDb).sort(byCreatedAsc),
+        );
+        if (chg.error) console.error("staff_charges:", chg.error);
 
         if (r.error) console.error("routes:", r.error);
         if (inv.error) console.error("invoices:", inv.error);
@@ -1032,6 +1081,7 @@ export function AppProvider({ children }) {
           submissions: sub,
           applications: app,
           "billing recipients": br,
+          deductions: chg,
         })
           .filter(([, res]) => res.error)
           .map(([name]) => name);
@@ -1139,6 +1189,7 @@ export function AppProvider({ children }) {
     submissions,
     applications,
     billingRecipients,
+    staffCharges,
   };
 
   // Builds a setter for one table. Returns true when saved, false on failure.
@@ -1326,6 +1377,14 @@ export function AppProvider({ children }) {
     setRawBillingRecipients,
     { ownerCol: "owner_user_id", sort: byCreatedAsc },
   );
+  const setStaffCharges = makeSetter(
+    "staffCharges",
+    "staff_charges",
+    staffChargeToDb,
+    staffChargeFromDb,
+    setRawStaffCharges,
+    { entity: "deduction", sort: byCreatedAsc },
+  );
 
   const saveStaff = makeSetter(
     "staff",
@@ -1478,6 +1537,8 @@ export function AppProvider({ children }) {
         setApplications,
         billingRecipients,
         setBillingRecipients,
+        staffCharges,
+        setStaffCharges,
       }}
     >
       {children}
