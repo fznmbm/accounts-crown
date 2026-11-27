@@ -166,15 +166,26 @@ const personKey = (staffId, name) =>
  *              can mark them "recorded by office" instead
  *  - external: not on the staff list (temps) → not chased; recorded by office
  *
+ * mustSubmitTypes (Settings → Invoice submissions): which staff types are
+ * chased when they are the regular driver/PA, e.g. ["driver", "pa"].
+ * Not set = every type. A regular whose type isn't listed is treated like
+ * cover: not chased, the office records them.
+ *
  * @returns {{ people: Array, summary: Object }}
  */
+export const ALL_STAFF_TYPES = ["driver", "pa", "driver_pa"];
+
 export function getExpectedSubmissions({
   month,
   year,
   allocations = [],
   staff = [],
   submissions = [],
+  mustSubmitTypes = null,
 }) {
+  const chasedTypes = Array.isArray(mustSubmitTypes)
+    ? mustSubmitTypes
+    : ALL_STAFF_TYPES;
   const m = Number(month);
   const y = Number(year);
   const staffById = new Map(staff.map((s) => [s.id, s]));
@@ -201,14 +212,16 @@ export function getExpectedSubmissions({
     )[0];
     const status = best?.status || "missing";
     const received = RECEIVED_STATUSES.includes(status);
+    const mustSubmit =
+      p.category === "regular" && chasedTypes.includes(p.staffType || "driver");
     return {
       ...p,
       submission: best || null,
       status, // approved | submitted | office_recorded | recalled | rejected | missing
       received,
-      mustSubmit: p.category === "regular",
-      needsChasing: p.category === "regular" && !received,
-      canRecordByOffice: p.category !== "regular" && !received,
+      mustSubmit,
+      needsChasing: mustSubmit && !received,
+      canRecordByOffice: !mustSubmit && !received,
     };
   });
 
@@ -219,8 +232,8 @@ export function getExpectedSubmissions({
       a.name.localeCompare(b.name),
   );
 
-  const regular = result.filter((p) => p.category === "regular");
-  const others = result.filter((p) => p.category !== "regular");
+  const regular = result.filter((p) => p.mustSubmit);
+  const others = result.filter((p) => !p.mustSubmit);
   const summary = {
     expected: result.length,
     received: result.filter((p) => p.received).length,

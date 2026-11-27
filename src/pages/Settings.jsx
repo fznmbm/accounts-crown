@@ -834,6 +834,52 @@ export default function Settings() {
             </div>
           </div>
 
+          {/* Invoice submissions */}
+          <div className="card p-5 space-y-4">
+            <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
+              Invoice submissions
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Which staff must send their monthly invoice through the portal
+              when they are the regular driver or PA on a route. Anyone not
+              ticked is listed under "office records" on the Not submitted tab
+              instead of being chased. Cover and external temps are never
+              chased.
+            </p>
+            <div className="flex flex-wrap gap-4">
+              {[
+                { value: "driver", label: "Drivers" },
+                { value: "pa", label: "PAs" },
+                { value: "driver_pa", label: "Driver & PA" },
+              ].map((t) => {
+                const current = Array.isArray(form.mustSubmitTypes)
+                  ? form.mustSubmitTypes
+                  : ["driver", "pa", "driver_pa"];
+                return (
+                  <label
+                    key={t.value}
+                    className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded"
+                      checked={current.includes(t.value)}
+                      onChange={(e) =>
+                        setForm((p) => ({
+                          ...p,
+                          mustSubmitTypes: e.target.checked
+                            ? [...new Set([...current, t.value])]
+                            : current.filter((x) => x !== t.value),
+                        }))
+                      }
+                    />
+                    {t.label}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Cloudinary file storage */}
           <div className="card p-5 space-y-4">
             <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
