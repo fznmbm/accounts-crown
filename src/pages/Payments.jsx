@@ -50,6 +50,11 @@ const TABS = [
   { key: "deductions", label: "Deductions" },
 ];
 const periodKey = (m, y) => Number(y) * 12 + Number(m);
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const nextPeriod = (m, y) =>
+  Number(m) === 11
+    ? { month: 0, year: Number(y) + 1 }
+    : { month: Number(m) + 1, year: Number(y) };
 
 export default function Payments() {
   const {
@@ -79,6 +84,8 @@ export default function Payments() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
+  // true once the user types their own amount — stop auto-filling it
+  const [amountTouched, setAmountTouched] = useState(false);
   const [staffF, setStaffF] = useState("all");
   const [monthF, setMonthF] = useState("all");
   const [yearF, setYearF] = useState(
@@ -106,6 +113,75 @@ export default function Payments() {
       )
       .map((c) => c.id);
 
+  // ── What this payment means for the work month ────────────────────────────
+  // Ticked deductions come off this payment. Unticked ones are left out of the
+  // sum here; on save they either stay due this month (if enough is still owed
+  // after this payment) or move to next month.
+  const planFor = (fm) => {
+    const hasPerson = fm.isExternal
+      ? (fm.externalName || "").trim()
+      : fm.staffId;
+    if (!hasPerson) return null;
+    const target = periodKey(fm.month, fm.year);
+    const ids = fm.chargeIds || [];
+    const due = chargesFor(fm.staffId, fm.externalName, fm.isExternal).filter(
+      (c) =>
+        (c.status === "outstanding" &&
+          periodKey(c.deductMonth, c.deductYear) <= target) ||
+        (editing && c.paymentId === editing.id),
+    );
+    const ticked = due.filter((c) => ids.includes(c.id));
+    const unticked = due.filter((c) => !ids.includes(c.id));
+    const untickedIds = new Set(unticked.map((c) => c.id));
+    const row = getPayables({
+      month: Number(fm.month),
+      year: Number(fm.year),
+      allocations,
+      staff,
+      payments: editing
+        ? payments.filter((x) => x.id !== editing.id)
+        : payments,
+      staffCharges: staffCharges.filter((c) => !untickedIds.has(c.id)),
+    }).rows.find((r) =>
+      fm.isExternal
+        ? r.isExternal &&
+          r.name.trim().toLowerCase() === fm.externalName.trim().toLowerCase()
+        : r.staffId === fm.staffId,
+    );
+    const tickedTotal = round2(ticked.reduce((s, c) => s + c.amount, 0));
+    const untickedTotal = round2(unticked.reduce((s, c) => s + c.amount, 0));
+    const net = row ? row.netToPay : 0; // owed after ticked deductions
+    const amount = round2(parseFloat(fm.amount) || 0);
+    // Unticked deductions stay due this month only if money is still owed
+    // for the month after this payment and them; otherwise next month
+    const keepInMonth =
+      untickedTotal > 0 && round2(net - amount - untickedTotal) > 0.005;
+    return {
+      due,
+      ticked,
+      unticked,
+      tickedTotal,
+      untickedTotal,
+      net,
+      suggested: Math.max(0, net),
+      owedBeforeDeductions: round2(net + tickedTotal),
+      amount,
+      keepInMonth,
+      next: nextPeriod(fm.month, fm.year),
+    };
+  };
+
+  // Recalculate the amount after the person, month or ticks change
+  // (never on an existing payment, never after the user typed their own)
+  const withAmount = (next, reset) => {
+    if (editing || (!reset && amountTouched)) return next;
+    const plan = planFor(next);
+    return {
+      ...next,
+      amount: plan && plan.suggested > 0 ? plan.suggested.toFixed(2) : "",
+    };
+  };
+
   // Open the payment form from the Pay run, already filled in
   const payFromRun = (row, month, year) => {
     setForm({
@@ -114,12 +190,13 @@ export default function Payments() {
       staffId: row.isExternal ? "" : row.staffId,
       isExternal: row.isExternal,
       externalName: row.isExternal ? row.name : "",
-      amount: row.netToPay.toFixed(2),
+      amount: Math.max(0, row.netToPay).toFixed(2),
       month,
       year,
       reference: `${MONTHS[month]} ${year} pay`,
       chargeIds: row.outstandingCharges.map((c) => c.id),
     });
+    setAmountTouched(false);
     setEditing(null);
     setShowModal(true);
   };
@@ -127,6 +204,7 @@ export default function Payments() {
   const f = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const open = () => {
     setForm(EMPTY);
+    setAmountTouched(false);
     setEditing(null);
     setShowModal(true);
   };
@@ -147,6 +225,7 @@ export default function Payments() {
         .filter((c) => c.paymentId === p.id)
         .map((c) => c.id),
     });
+    setAmountTouched(true); // a saved payment keeps its amount
     setEditing(p);
     setShowModal(true);
   };
@@ -156,7 +235,12 @@ export default function Payments() {
   };
 
   const save = async () => {
-    if ((!form.staffId && !form.externalName) || !form.amount) return;
+    if (!form.staffId && !form.externalName) return;
+    if (!(parseFloat(form.amount) > 0)) {
+      toast.error("Enter an amount more than £0.");
+      return;
+    }
+    const plan = planFor(form);
     const { chargeIds = [], ...fields } = form;
     const record = {
       id: editing?.id || uid(),
@@ -184,23 +268,34 @@ export default function Payments() {
     );
     if (!ok) return; // form stays open; the error message is already shown
 
-    // Mark ticked deductions as taken off this payment; any that were linked
-    // to it before but are now unticked go back to "to deduct"
-    const changed = staffCharges.some(
-      (c) =>
-        (chargeIds.includes(c.id) && c.paymentId !== record.id) ||
-        (!chargeIds.includes(c.id) && c.paymentId === record.id),
-    );
-    if (changed) {
-      const okCharges = await setStaffCharges(
-        staffCharges.map((c) => {
-          if (chargeIds.includes(c.id))
-            return { ...c, status: "deducted", paymentId: record.id };
-          if (c.paymentId === record.id)
-            return { ...c, status: "outstanding", paymentId: null };
-          return c;
-        }),
-      );
+    // Ticked deductions are taken off this payment. Unticked ones go back to
+    // "to deduct" — kept in this month if enough is still owed, otherwise
+    // moved to next month so this month's figures stay right.
+    const untickedIds = new Set((plan?.unticked || []).map((c) => c.id));
+    let moved = 0;
+    const nextCharges = staffCharges.map((c) => {
+      if (chargeIds.includes(c.id)) {
+        if (c.status === "deducted" && c.paymentId === record.id) return c;
+        return { ...c, status: "deducted", paymentId: record.id };
+      }
+      if (untickedIds.has(c.id) || c.paymentId === record.id) {
+        const out = { ...c, status: "outstanding", paymentId: null };
+        if (!plan?.keepInMonth) {
+          out.deductMonth = plan.next.month;
+          out.deductYear = plan.next.year;
+          moved += 1;
+        }
+        const same =
+          out.status === c.status &&
+          out.paymentId === (c.paymentId ?? null) &&
+          out.deductMonth === c.deductMonth &&
+          out.deductYear === c.deductYear;
+        return same ? c : out;
+      }
+      return c;
+    });
+    if (nextCharges.some((c, i) => c !== staffCharges[i])) {
+      const okCharges = await setStaffCharges(nextCharges);
       if (!okCharges) {
         toast.error(
           "The payment was saved, but the deductions weren't marked. Open the Deductions tab and check them.",
@@ -210,13 +305,16 @@ export default function Payments() {
         return;
       }
     }
-    toast.success(
-      editing
-        ? "Payment updated."
-        : chargeIds.length
-          ? `Payment logged. ${chargeIds.length} deduction${chargeIds.length > 1 ? "s" : ""} marked as deducted.`
-          : "Payment logged.",
-    );
+    const parts = [editing ? "Payment updated." : "Payment logged."];
+    if (chargeIds.length)
+      parts.push(
+        `${chargeIds.length} deduction${chargeIds.length > 1 ? "s" : ""} taken off.`,
+      );
+    if (moved)
+      parts.push(
+        `${moved} moved to ${MONTHS_SHORT[plan.next.month]} ${plan.next.year}.`,
+      );
+    toast.success(parts.join(" "));
     close();
   };
 
@@ -543,19 +641,25 @@ export default function Payments() {
                   value={form.externalName}
                   onChange={(e) => {
                     const externalName = e.target.value;
-                    setForm((p) => ({
-                      ...p,
-                      externalName,
-                      chargeIds: editing
-                        ? p.chargeIds
-                        : dueChargeIds(
-                            null,
-                            externalName,
-                            true,
-                            p.month,
-                            p.year,
-                          ),
-                    }));
+                    if (!editing) setAmountTouched(false);
+                    setForm((p) =>
+                      withAmount(
+                        {
+                          ...p,
+                          externalName,
+                          chargeIds: editing
+                            ? p.chargeIds
+                            : dueChargeIds(
+                                null,
+                                externalName,
+                                true,
+                                p.month,
+                                p.year,
+                              ),
+                        },
+                        true,
+                      ),
+                    );
                   }}
                   placeholder="e.g. Ahmed Khan — ABC Taxis"
                 />
@@ -565,13 +669,19 @@ export default function Payments() {
                   value={form.staffId}
                   onChange={(e) => {
                     const staffId = e.target.value;
-                    setForm((p) => ({
-                      ...p,
-                      staffId,
-                      chargeIds: editing
-                        ? p.chargeIds
-                        : dueChargeIds(staffId, "", false, p.month, p.year),
-                    }));
+                    if (!editing) setAmountTouched(false);
+                    setForm((p) =>
+                      withAmount(
+                        {
+                          ...p,
+                          staffId,
+                          chargeIds: editing
+                            ? p.chargeIds
+                            : dueChargeIds(staffId, "", false, p.month, p.year),
+                        },
+                        true,
+                      ),
+                    );
                   }}
                 >
                   <option value="">Select staff…</option>
@@ -587,14 +697,17 @@ export default function Payments() {
               <input
                 type="checkbox"
                 checked={form.isExternal}
-                onChange={(e) =>
+                onChange={(e) => {
+                  if (!editing) setAmountTouched(false);
                   setForm((p) => ({
                     ...p,
                     isExternal: e.target.checked,
                     staffId: "",
                     externalName: "",
-                  }))
-                }
+                    chargeIds: editing ? p.chargeIds : [],
+                    amount: editing ? p.amount : "",
+                  }));
+                }}
                 className="w-3.5 h-3.5 rounded"
               />
               External / one-off payment (driver not in staff list)
@@ -606,7 +719,10 @@ export default function Payments() {
                   type="number"
                   step="0.01"
                   value={form.amount}
-                  onChange={f("amount")}
+                  onChange={(e) => {
+                    setAmountTouched(true);
+                    f("amount")(e);
+                  }}
                   placeholder="0.00"
                 />
               </FormField>
@@ -635,6 +751,7 @@ export default function Payments() {
                   value={form.month}
                   onChange={(e) => {
                     const value = e.target.value;
+                    if (!editing) setAmountTouched(false);
                     setForm((p) => {
                       const next = { ...p, month: value };
                       if (!editing)
@@ -645,7 +762,7 @@ export default function Payments() {
                           next.month,
                           next.year,
                         );
-                      return next;
+                      return withAmount(next, true);
                     });
                   }}
                 >
@@ -662,6 +779,7 @@ export default function Payments() {
                   value={form.year}
                   onChange={(e) => {
                     const value = e.target.value;
+                    if (!editing) setAmountTouched(false);
                     setForm((p) => {
                       const next = { ...p, year: value };
                       if (!editing)
@@ -672,7 +790,7 @@ export default function Payments() {
                           next.month,
                           next.year,
                         );
-                      return next;
+                      return withAmount(next, true);
                     });
                   }}
                 >
@@ -693,118 +811,152 @@ export default function Payments() {
               />
             </FormField>
 
-            {/* Deductions reminder */}
+            {/* What this payment does — deductions and what's left owed */}
             {(() => {
-              const mine = chargesFor(
+              const plan = planFor(form);
+              if (!plan) return null;
+              const ids = form.chargeIds || [];
+              const later = chargesFor(
                 form.staffId,
                 form.externalName,
                 form.isExternal,
-              );
-              const target = periodKey(form.month, form.year);
-              const due = mine.filter(
-                (c) =>
-                  (c.status === "outstanding" &&
-                    periodKey(c.deductMonth, c.deductYear) <= target) ||
-                  (editing && c.paymentId === editing.id),
-              );
-              const later = mine.filter(
+              ).filter(
                 (c) =>
                   c.status === "outstanding" &&
-                  periodKey(c.deductMonth, c.deductYear) > target,
+                  periodKey(c.deductMonth, c.deductYear) >
+                    periodKey(form.month, form.year),
               );
-              if (due.length === 0 && later.length === 0) return null;
-              const ticked = due.filter((c) =>
-                (form.chargeIds || []).includes(c.id),
+              const monthLabel = `${MONTHS_SHORT[form.month]} ${form.year}`;
+              const nextLabel = `${MONTHS_SHORT[plan.next.month]} ${plan.next.year}`;
+              const left = round2(
+                plan.net -
+                  plan.amount -
+                  (plan.keepInMonth ? plan.untickedTotal : 0),
               );
-              const tickedTotal = ticked.reduce((s, c) => s + c.amount, 0);
-              // Suggested amount for this work month, after deductions
-              const row = getPayables({
-                month: Number(form.month),
-                year: Number(form.year),
-                allocations,
-                staff,
-                payments: editing
-                  ? payments.filter((x) => x.id !== editing.id)
-                  : payments,
-                staffCharges,
-              }).rows.find((r) =>
-                form.isExternal
-                  ? r.isExternal &&
-                    r.name.trim().toLowerCase() ===
-                      form.externalName.trim().toLowerCase()
-                  : r.staffId === form.staffId,
-              );
+              const differs = Math.abs(plan.amount - plan.suggested) > 0.005;
+              const hasDue = plan.due.length > 0;
               return (
-                <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 space-y-2">
-                  {due.length > 0 && (
+                <div
+                  className={
+                    hasDue
+                      ? "rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 space-y-2"
+                      : "rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 p-3 space-y-2"
+                  }
+                >
+                  {hasDue && (
                     <>
                       <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
                         ⚠ Deductions to take off this payment
                       </p>
-                      {due.map((c) => (
-                        <label
-                          key={c.id}
-                          className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 rounded"
-                            checked={(form.chargeIds || []).includes(c.id)}
-                            onChange={(e) =>
-                              setForm((p) => ({
-                                ...p,
-                                chargeIds: e.target.checked
-                                  ? [...(p.chargeIds || []), c.id]
-                                  : (p.chargeIds || []).filter(
-                                      (x) => x !== c.id,
-                                    ),
-                              }))
-                            }
-                          />
-                          <span className="flex-1">
-                            {categoryLabel(c.category)}
-                            {c.description ? ` — ${c.description}` : ""}
-                            <span className="text-amber-600 dark:text-amber-400">
-                              {" "}
-                              ({MONTHS_SHORT[c.deductMonth]} {c.deductYear}
-                              {c.instalments > 1
-                                ? `, ${c.instalmentNo} of ${c.instalments}`
-                                : ""}
-                              )
+                      {plan.due.map((c) => {
+                        const isTicked = ids.includes(c.id);
+                        return (
+                          <label
+                            key={c.id}
+                            className="flex items-start gap-2 text-sm text-amber-800 dark:text-amber-300 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 rounded mt-0.5"
+                              checked={isTicked}
+                              onChange={(e) => {
+                                const on = e.target.checked;
+                                setForm((p) =>
+                                  withAmount(
+                                    {
+                                      ...p,
+                                      chargeIds: on
+                                        ? [...(p.chargeIds || []), c.id]
+                                        : (p.chargeIds || []).filter(
+                                            (x) => x !== c.id,
+                                          ),
+                                    },
+                                    false,
+                                  ),
+                                );
+                              }}
+                            />
+                            <span className="flex-1">
+                              {categoryLabel(c.category)}
+                              {c.description ? ` — ${c.description}` : ""}
+                              <span className="text-amber-600 dark:text-amber-400">
+                                {" "}
+                                ({MONTHS_SHORT[c.deductMonth]} {c.deductYear}
+                                {c.instalments > 1
+                                  ? `, ${c.instalmentNo} of ${c.instalments}`
+                                  : ""}
+                                )
+                              </span>
+                              {!isTicked && (
+                                <span className="block text-xs text-gray-500 dark:text-gray-400">
+                                  Not this time —{" "}
+                                  {plan.keepInMonth
+                                    ? `stays due for ${monthLabel} (offered on the next ${monthLabel} payment)`
+                                    : `moves to ${nextLabel}`}
+                                </span>
+                              )}
                             </span>
-                          </span>
-                          <span className="font-semibold">{fmt(c.amount)}</span>
-                        </label>
-                      ))}
+                            <span className="font-semibold">
+                              {fmt(c.amount)}
+                            </span>
+                          </label>
+                        );
+                      })}
                       <p className="text-xs text-amber-700 dark:text-amber-400">
-                        Ticked: {fmt(tickedTotal)} — these are marked as
-                        deducted when you save.
+                        Ticked: {fmt(plan.tickedTotal)} — taken off when you
+                        save.
                       </p>
                     </>
                   )}
-                  {row && (
-                    <div className="flex items-center justify-between gap-3 text-sm pt-1 border-t border-amber-200 dark:border-amber-800">
-                      <span className="text-amber-800 dark:text-amber-300">
-                        Suggested payment for {MONTHS_SHORT[form.month]}{" "}
-                        {form.year}, after deductions:{" "}
-                        <span className="font-semibold">
-                          {fmt(Math.max(0, row.netToPay))}
-                        </span>
+
+                  {plan.net < -0.005 && (
+                    <p className="text-xs font-medium text-red-600 dark:text-red-400">
+                      Ticked deductions ({fmt(plan.tickedTotal)}) are more than
+                      is owed for {monthLabel} (
+                      {fmt(Math.max(0, plan.owedBeforeDeductions))}). Untick one
+                      to take it next month, or split it in the Deductions tab.
+                    </p>
+                  )}
+
+                  <div
+                    className={`flex items-center justify-between gap-3 text-sm ${hasDue ? "pt-1 border-t border-amber-200 dark:border-amber-800" : ""}`}
+                  >
+                    <span className="text-gray-700 dark:text-gray-300">
+                      Owed for {monthLabel}
+                      {plan.tickedTotal > 0
+                        ? " after ticked deductions"
+                        : ""}:{" "}
+                      <span className="font-semibold">
+                        {fmt(plan.suggested)}
                       </span>
+                    </span>
+                    {differs && plan.suggested > 0 && (
                       <button
                         type="button"
                         className="btn-secondary text-xs px-2 py-1"
-                        onClick={() =>
+                        onClick={() => {
+                          setAmountTouched(false);
                           setForm((p) => ({
                             ...p,
-                            amount: Math.max(0, row.netToPay).toFixed(2),
-                          }))
-                        }
+                            amount: plan.suggested.toFixed(2),
+                          }));
+                        }}
                       >
-                        Use
+                        Use {fmt(plan.suggested)}
                       </button>
-                    </div>
+                    )}
+                  </div>
+
+                  {plan.amount > 0 && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {left > 0.005
+                        ? `After this payment, ${fmt(left)} is still owed for ${monthLabel}.`
+                        : left < -0.005
+                          ? `This is ${fmt(-left)} more than owed — the extra comes off what's owed next month.`
+                          : `This settles ${monthLabel}.`}
+                    </p>
                   )}
+
                   {later.length > 0 && (
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       Later instalments:{" "}
