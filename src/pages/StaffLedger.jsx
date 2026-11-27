@@ -4,6 +4,7 @@ import PageHeader from "../components/PageHeader";
 import Modal, { ModalFooter } from "../components/Modal";
 import Badge from "../components/Badge";
 import EmptyState from "../components/EmptyState";
+import { toast } from "sonner";
 import {
   fmt,
   fmtD,
@@ -29,7 +30,13 @@ function BalancePill({ balance }) {
 }
 
 export default function StaffLedger() {
-  const { staff, payments, allocations, staffCharges = [] } = useApp();
+  const {
+    staff,
+    payments,
+    allocations,
+    staffCharges = [],
+    settings = {},
+  } = useApp();
   const [selected, setSelected] = useState(null); // person key
   const [yearF, setYearF] = useState(() => {
     const s = localStorage.getItem("ledger_year");
@@ -254,6 +261,160 @@ export default function StaffLedger() {
   const yearBalance = round2(yearEarned - yearPaid - yearDeducted);
   const upcoming = selected ? upcomingByPerson.get(selected) || [] : [];
 
+  // ── Printable statement for the selected person and period ────────────────
+  const printStatement = () => {
+    if (!selectedSummary) return;
+    const esc = (v) =>
+      String(v ?? "").replace(
+        /[&<>"']/g,
+        (ch) =>
+          ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          })[ch],
+      );
+    const money = (n) => esc(fmt(n));
+    const owedText = (n) =>
+      n > 0.01
+        ? `We owe you ${fmt(n)}`
+        : n < -0.01
+          ? `You owe us ${fmt(Math.abs(n))}`
+          : "Settled";
+    const before =
+      yearF === "all"
+        ? []
+        : ledgerWithRunning.filter((l) => l.year < Number(yearF));
+    const opening = before.length ? before[before.length - 1].running : 0;
+    const closing = filteredLedger.length
+      ? filteredLedger[filteredLedger.length - 1].running
+      : opening;
+    const period =
+      yearF === "all"
+        ? "All time"
+        : `January – December ${yearF} (work months)`;
+    const person = selectedSummary;
+    const today = new Date().toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+
+    const rows = filteredLedger
+      .map(
+        (l) => `<tr class="${l.type}">
+          <td>${esc(MONTHS_SHORT[l.month])} ${esc(l.year)}</td>
+          <td>${esc(l.label)}</td>
+          <td class="muted">${esc(l.detail)}</td>
+          <td class="r">${l.type === "earning" ? money(l.amount) : ""}</td>
+          <td class="r">${l.type === "payment" ? money(l.amount) : ""}</td>
+          <td class="r">${l.type === "deduction" ? money(l.amount) : ""}</td>
+          <td class="r b">${money(l.running)}</td>
+        </tr>`,
+      )
+      .join("");
+
+    const upcomingHtml = upcoming.length
+      ? `<h3>Upcoming deductions (not yet in the balance)</h3>
+         <table class="small"><tbody>${[...upcoming]
+           .sort(
+             (a, b) =>
+               periodKey(a.deductMonth, a.deductYear) -
+               periodKey(b.deductMonth, b.deductYear),
+           )
+           .map(
+             (
+               c,
+             ) => `<tr><td>${esc(MONTHS_SHORT[c.deductMonth])} ${esc(c.deductYear)}</td>
+               <td>${esc(categoryLabel(c.category))}${c.description ? ` — ${esc(c.description)}` : ""}${
+                 c.instalments > 1
+                   ? ` (${c.instalmentNo} of ${c.instalments})`
+                   : ""
+               }</td><td class="r">${money(c.amount)}</td></tr>`,
+           )
+           .join("")}</tbody></table>`
+      : "";
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Statement — ${esc(person.name)} — ${esc(yearF === "all" ? "All time" : yearF)}</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#111;margin:28px}
+  .top{display:flex;justify-content:space-between;gap:24px;margin-bottom:18px}
+  .co{white-space:pre-line;font-size:9pt;color:#444}
+  h1{font-size:16pt;margin:0 0 4px}
+  h3{font-size:10pt;margin:18px 0 6px}
+  .muted{color:#666}
+  .box{border:1px solid #ddd;border-radius:6px;padding:10px 12px;margin:12px 0}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th,td{padding:5px 6px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+  th{background:#f5f5f5;font-size:8.5pt;text-transform:uppercase;letter-spacing:.03em}
+  .r{text-align:right;white-space:nowrap}
+  .b{font-weight:bold}
+  tr.payment td{background:#f3f7fd}
+  tr.deduction td{background:#fdf8ee}
+  tr.total td{font-weight:bold;border-top:2px solid #333;background:#fafafa}
+  table.small td{font-size:9pt}
+  .sum td{border:none;padding:3px 0}
+  .close{font-size:12pt;font-weight:bold}
+  .bar{margin-bottom:16px}
+  .bar button{padding:6px 14px;font-size:10pt;cursor:pointer}
+  @media print{.bar{display:none}body{margin:12mm}}
+</style></head><body>
+<div class="bar"><button onclick="window.print()">Print / Save as PDF</button></div>
+<div class="top">
+  <div>
+    ${settings.logoUrl ? `<img src="${esc(settings.logoUrl)}" alt="" style="max-height:56px;margin-bottom:6px"><br>` : ""}
+    <strong>${esc(settings.companyName || "")}</strong>
+    <div class="co">${esc(settings.address || "")}${settings.phone ? `\n${esc(settings.phone)}` : ""}${settings.email ? `\n${esc(settings.email)}` : ""}</div>
+  </div>
+  <div style="text-align:right">
+    <h1>Statement of account</h1>
+    <div class="muted">Issued ${esc(today)}</div>
+  </div>
+</div>
+<div class="grid">
+  <div class="box">
+    <div class="muted">Statement for</div>
+    <strong>${esc(person.name)}</strong>
+    ${person.isExternal ? `<div class="muted">External driver / PA</div>` : person.type ? `<div class="muted" style="text-transform:capitalize">${esc(String(person.type).replace("_", " "))}</div>` : ""}
+    ${person.address ? `<div class="co">${esc(person.address)}</div>` : ""}
+  </div>
+  <div class="box">
+    <div class="muted">Period</div>
+    <strong>${esc(period)}</strong>
+    <table class="sum"><tbody>
+      ${yearF === "all" ? "" : `<tr><td>Opening balance</td><td class="r">${money(opening)}</td></tr>`}
+      <tr><td>Earned</td><td class="r">${money(yearEarned)}</td></tr>
+      <tr><td>Paid</td><td class="r">− ${money(yearPaid)}</td></tr>
+      ${yearDeducted > 0 ? `<tr><td>Deductions</td><td class="r">− ${money(yearDeducted)}</td></tr>` : ""}
+      <tr class="close"><td>Closing balance</td><td class="r">${esc(owedText(closing))}</td></tr>
+    </tbody></table>
+  </div>
+</div>
+<table>
+  <thead><tr><th>Month</th><th>Description</th><th>Detail</th><th class="r">Earned</th><th class="r">Paid</th><th class="r">Deducted</th><th class="r">Balance</th></tr></thead>
+  <tbody>
+    ${yearF === "all" ? "" : `<tr><td></td><td>Opening balance</td><td></td><td></td><td></td><td></td><td class="r b">${money(opening)}</td></tr>`}
+    ${rows || `<tr><td colspan="7" class="muted">No earnings, payments or deductions in this period.</td></tr>`}
+    <tr class="total"><td></td><td>Totals</td><td></td>
+      <td class="r">${money(yearEarned)}</td><td class="r">${money(yearPaid)}</td><td class="r">${money(yearDeducted)}</td>
+      <td class="r">${money(closing)}</td></tr>
+  </tbody>
+</table>
+<p class="muted" style="font-size:8.5pt">Balance: a positive figure is what we owe you; a negative figure is money paid to you in advance. Earnings are shown in the month the work was done; payments against the month they were for.</p>
+${upcomingHtml}
+</body></html>`;
+
+    const win = window.open("", "_blank", "width=900,height=800");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    } else toast.error("Pop-up blocked — please allow pop-ups for this site.");
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader
@@ -398,8 +559,16 @@ export default function StaffLedger() {
                 <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                   Transaction history
                 </p>
+                <button
+                  type="button"
+                  className="btn-secondary text-xs px-3 py-1.5 ml-auto"
+                  onClick={printStatement}
+                  title="Opens a printable statement for this person and the selected year"
+                >
+                  🖨 Print statement
+                </button>
                 <select
-                  className="input w-28 ml-auto"
+                  className="input w-28"
                   value={yearF}
                   onChange={(e) => {
                     const v =
