@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import GlobalSearch from "./GlobalSearch";
 import { CONFIG } from "../config";
 import { useApp } from "../context/AppContext";
+import { getExpectedSubmissions } from "../lib/monthStatus";
+import { currentMonth, currentYear, MONTHS } from "../lib/utils";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard" },
@@ -108,7 +110,42 @@ function SaveIndicator() {
 export default function Layout() {
   const { dark, toggle } = useTheme();
   const { user, logout } = useAuth();
-  const { settings, applications, submissions, billingRecipients } = useApp();
+  const {
+    settings,
+    applications,
+    submissions,
+    billingRecipients,
+    allocations,
+    staff,
+  } = useApp();
+  const location = useLocation();
+  const [navOpen, setNavOpen] = useState(false);
+
+  // Close the mobile menu on every page change and with the Escape key
+  useEffect(() => setNavOpen(false), [location.pathname]);
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e) => e.key === "Escape" && setNavOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
+
+  // Invoices still missing for LAST month (October's arrive in November)
+  const lastMonth = currentMonth() === 0 ? 11 : currentMonth() - 1;
+  const lastMonthYear =
+    currentMonth() === 0 ? currentYear() - 1 : currentYear();
+  const missingInvoices = useMemo(
+    () =>
+      getExpectedSubmissions({
+        month: lastMonth,
+        year: lastMonthYear,
+        allocations: allocations || [],
+        staff: staff || [],
+        submissions: submissions || [],
+        mustSubmitTypes: settings?.mustSubmitTypes,
+      }).summary.missing,
+    [lastMonth, lastMonthYear, allocations, staff, submissions, settings],
+  );
   const defaultRecipient =
     billingRecipients?.find((r) => r.isDefault) ||
     billingRecipients?.[0] ||
@@ -118,11 +155,26 @@ export default function Layout() {
   const pendingSubmissions =
     submissions?.filter((s) => s.status === "submitted").length || 0;
   const logoUrl = settings?.logoUrl || CONFIG.logoUrl;
+  const alertCount = pendingCount + pendingSubmissions + missingInvoices;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-950">
-      {/* ── Sidebar ── */}
-      <aside className="w-56 flex-shrink-0 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col">
+    <div className="flex h-dvh overflow-hidden bg-gray-50 dark:bg-gray-950">
+      {/* Mobile menu backdrop */}
+      {navOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          onClick={() => setNavOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* ── Sidebar (drawer on phones and tablets, fixed on desktop) ── */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-64 max-w-[85vw] transform transition-transform duration-200 lg:static lg:z-auto lg:w-56 lg:max-w-none lg:translate-x-0 flex-shrink-0 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col ${
+          navOpen ? "translate-x-0 shadow-xl" : "-translate-x-full"
+        }`}
+        aria-label="Main menu"
+      >
         {/* Brand */}
         <div className="px-4 py-4 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-2.5">
@@ -168,7 +220,7 @@ export default function Layout() {
               key={to}
               to={to}
               className={({ isActive }) =>
-                `flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                `flex items-center justify-between px-3 py-2.5 lg:py-2 rounded-lg text-sm transition-colors ${
                   isActive
                     ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium"
                     : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-200"
@@ -181,11 +233,27 @@ export default function Layout() {
                   {pendingCount}
                 </span>
               )}
-              {label === "Invoice Submissions" && pendingSubmissions > 0 && (
-                <span className="ml-1 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                  {pendingSubmissions}
-                </span>
-              )}
+              {label === "Invoice Submissions" &&
+                (missingInvoices > 0 || pendingSubmissions > 0) && (
+                  <span className="ml-1 flex items-center gap-1">
+                    {missingInvoices > 0 && (
+                      <span
+                        className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"
+                        title={`${missingInvoices} invoice${missingInvoices !== 1 ? "s" : ""} not received for ${MONTHS[lastMonth]} ${lastMonthYear}`}
+                      >
+                        {missingInvoices}
+                      </span>
+                    )}
+                    {pendingSubmissions > 0 && (
+                      <span
+                        className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"
+                        title={`${pendingSubmissions} submission${pendingSubmissions !== 1 ? "s" : ""} awaiting review`}
+                      >
+                        {pendingSubmissions}
+                      </span>
+                    )}
+                  </span>
+                )}
             </NavLink>
           ))}
         </nav>
@@ -237,7 +305,50 @@ export default function Layout() {
       </aside>
 
       {/* ── Main ── */}
-      <main className="flex-1 overflow-hidden flex flex-col">
+      <main className="flex-1 min-w-0 overflow-hidden flex flex-col">
+        {/* Top bar — phones and tablets only */}
+        <div className="lg:hidden flex items-center gap-3 px-3 h-14 flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+          <button
+            type="button"
+            onClick={() => setNavOpen(true)}
+            className="relative w-11 h-11 -ml-1 flex items-center justify-center rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            aria-label="Open menu"
+            aria-expanded={navOpen}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            {alertCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
+            )}
+          </button>
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt=""
+              className="w-7 h-7 rounded-md object-cover flex-shrink-0"
+            />
+          ) : (
+            <div
+              className="w-7 h-7 rounded-md flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+              style={{ background: CONFIG.primaryColour }}
+            >
+              {CONFIG.companyInitials}
+            </div>
+          )}
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+            {CONFIG.companyName}
+          </p>
+        </div>
         <Outlet />
       </main>
     </div>
