@@ -11,8 +11,14 @@ import {
   MONTHS_SHORT,
   YEARS,
   currentYear,
-  getAllocAmountForStaff,
+  currentMonth,
 } from "../lib/utils";
+import { categoryLabel } from "../components/DeductionsPanel";
+
+const periodKey = (m, y) => Number(y) * 12 + Number(m);
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+// Same key as the Pay run uses for people not on the staff list
+const extKey = (name) => `ext:${(name || "").trim().toLowerCase()}`;
 
 function BalancePill({ balance }) {
   if (balance > 0.01)
@@ -23,145 +29,209 @@ function BalancePill({ balance }) {
 }
 
 export default function StaffLedger() {
-  const { staff, payments, allocations } = useApp();
-  const [selected, setSelected] = useState(null);
+  const { staff, payments, allocations, staffCharges = [] } = useApp();
+  const [selected, setSelected] = useState(null); // person key
   const [yearF, setYearF] = useState(() => {
     const s = localStorage.getItem("ledger_year");
     return s !== null ? (s === "all" ? "all" : parseInt(s)) : currentYear();
   });
 
-  // ── Per-staff summary ──────────────────────────────────────────────────────
-  const summaries = staff.map((s) => {
-    const totalEarned = allocations.reduce(
-      (sum, a) => sum + getAllocAmountForStaff(a, s.id),
-      0,
-    );
-    const totalPaid = payments
-      .filter((p) => p.staffId === s.id)
-      .reduce((sum, p) => sum + p.amount, 0);
+  // ── Every line for every person (staff by id, external temps by name) ────
+  // Same matching rules as the Pay run (lib/monthStatus.js), so both agree.
+  const staffById = new Map(staff.map((s) => [s.id, s]));
+  const nowKey = periodKey(currentMonth(), currentYear());
+  const linesByPerson = new Map();
+  const people = new Map();
+  const touch = (key, name, isExternal) => {
+    if (!people.has(key))
+      people.set(key, { key, name: name || "Unknown", isExternal });
+    if (!linesByPerson.has(key)) linesByPerson.set(key, []);
+    return linesByPerson.get(key);
+  };
+  staff.forEach((s) => touch(`staff:${s.id}`, s.name, false));
 
-    const balance = totalEarned - totalPaid; // positive = you owe them
-
-    return { ...s, totalEarned, totalPaid, balance };
-  });
-
-  // ── Ledger for selected staff member ──────────────────────────────────────
-  const getLedger = (staffId) => {
-    const s = staff.find((x) => x.id === staffId);
-    if (!s) return [];
-
-    // Earnings from allocations — handles regular + multiple cover entries
-    const earnLines = [];
-    allocations.forEach((a) => {
-      // Regular entry
-      if (a.regularStaffId === staffId) {
-        earnLines.push({
-          id: a.id + "_reg",
-          type: "earning",
-          date: `${a.year}-${String(a.month + 1).padStart(2, "0")}-01`,
-          month: a.month,
-          year: a.year,
-          label: `Route ${a.routeNumber} — ${a.routeName}`,
-          detail: `${a.regularDays} days × ${fmt(a.regularRate)}`,
-          amount: a.regularAmount || 0,
-          sign: 1,
-        });
-      }
-      // Cover entries — use coverEntries array if available, fall back to legacy tempStaffId
-      if (a.coverEntries?.length > 0) {
-        a.coverEntries.forEach((c, i) => {
-          if (c.staffId === staffId) {
-            earnLines.push({
-              id: a.id + "_cover_" + i,
-              type: "earning",
-              date: `${a.year}-${String(a.month + 1).padStart(2, "0")}-01`,
-              month: a.month,
-              year: a.year,
-              label: `Route ${a.routeNumber} — ${a.routeName}`,
-              detail: `${c.days} days × ${fmt(c.rate)} (cover)`,
-              amount: Number(c.amount) || 0,
-              sign: 1,
-            });
-          }
-        });
-      } else if (a.tempStaffId === staffId) {
-        earnLines.push({
-          id: a.id + "_temp",
-          type: "earning",
-          date: `${a.year}-${String(a.month + 1).padStart(2, "0")}-01`,
-          month: a.month,
-          year: a.year,
-          label: `Route ${a.routeNumber} — ${a.routeName}`,
-          detail: `${a.tempDays} days × ${fmt(a.tempRate)} (cover)`,
-          amount: a.tempAmount || 0,
-          sign: 1,
-        });
-      }
-      // PA pay
-      if (a.paStaffId === staffId && (a.paAmount || 0) > 0) {
-        earnLines.push({
-          id: a.id + "_pa",
-          type: "earning",
-          date: `${a.year}-${String(a.month + 1).padStart(2, "0")}-01`,
-          month: a.month,
-          year: a.year,
-          label: `Route ${a.routeNumber} — ${a.routeName}`,
-          detail: `${a.paDays} days × ${fmt(a.paRate)} (PA)`,
-          amount: Number(a.paAmount) || 0,
-          sign: 1,
-        });
-      }
-      // Additive band pay
-      (a.additiveEntries || []).forEach((e, i) => {
-        if (e.staffId === staffId && Number(e.amount) > 0) {
-          earnLines.push({
-            id: a.id + "_additive_" + i,
-            type: "earning",
-            date: `${a.year}-${String(a.month + 1).padStart(2, "0")}-01`,
-            month: a.month,
-            year: a.year,
-            label: `Route ${a.routeNumber} — ${a.routeName}`,
-            detail: `${e.days} days × ${fmt(e.rate)} (${e.description})`,
-            amount: Number(e.amount) || 0,
-            sign: 1,
-          });
-        }
-      });
-    });
-
-    // Payments made
-    const payLines = payments
-      .filter((p) => p.staffId === staffId)
-      .map((p) => ({
-        id: p.id,
-        type: "payment",
-        date: p.date,
-        month: p.month,
-        year: p.year,
-        label: `Payment — ${MONTHS_SHORT[p.month]} ${p.year}`,
-        detail: p.reference || p.type,
-        amount: p.amount,
-        sign: -1,
-      }));
-
-    return [...earnLines, ...payLines].sort((a, b) => {
-      // Sort by year+month first, then date
-      const aKey = a.year * 100 + a.month;
-      const bKey = b.year * 100 + b.month;
-      if (aKey !== bKey) return aKey - bKey;
-      return new Date(a.date) - new Date(b.date);
+  const addEarning = ({ staffId, name, a, suffix, detail, amount }) => {
+    amount = Number(amount) || 0;
+    if (amount <= 0 || (!staffId && !name)) return;
+    const key = staffId ? `staff:${staffId}` : extKey(name);
+    touch(key, staffById.get(staffId)?.name || name, !staffId).push({
+      id: `${a.id}_${suffix}`,
+      type: "earning",
+      date: `${a.year}-${String(Number(a.month) + 1).padStart(2, "0")}-01`,
+      month: Number(a.month),
+      year: Number(a.year),
+      label: `Route ${a.routeNumber} — ${a.routeName}`,
+      detail,
+      amount,
     });
   };
 
+  allocations.forEach((a) => {
+    if (a.regularStaffId)
+      addEarning({
+        staffId: a.regularStaffId,
+        a,
+        suffix: "reg",
+        detail: `${a.regularDays} days × ${fmt(a.regularRate)}`,
+        amount: a.regularAmount,
+      });
+    if (a.paStaffId)
+      addEarning({
+        staffId: a.paStaffId,
+        name: a.paStaffName,
+        a,
+        suffix: "pa",
+        detail: `${a.paDays} days × ${fmt(a.paRate)} (PA)`,
+        amount: a.paAmount,
+      });
+    if (a.coverEntries?.length > 0) {
+      a.coverEntries.forEach((c, i) => {
+        const onList = c.staffId && !c.isExternal && staffById.has(c.staffId);
+        addEarning({
+          staffId: onList ? c.staffId : null,
+          name: c.staffName,
+          a,
+          suffix: `cover_${i}`,
+          detail: `${c.days} days × ${fmt(c.rate)} (cover)`,
+          amount: c.amount,
+        });
+      });
+    } else if (Number(a.tempAmount) > 0) {
+      const onList = a.tempStaffId && staffById.has(a.tempStaffId);
+      addEarning({
+        staffId: onList ? a.tempStaffId : null,
+        name: a.tempStaffName,
+        a,
+        suffix: "temp",
+        detail: `${a.tempDays} days × ${fmt(a.tempRate)} (cover)`,
+        amount: a.tempAmount,
+      });
+    }
+    (a.additiveEntries || []).forEach((e, i) => {
+      if (!e.staffId) return;
+      const isMain = e.staffId === a.regularStaffId;
+      const onList = staffById.has(e.staffId);
+      addEarning({
+        staffId: isMain || onList ? e.staffId : null,
+        name: e.staffName,
+        a,
+        suffix: `additive_${i}`,
+        detail: `${e.days} days × ${fmt(e.rate)} (${e.description || "extra"})`,
+        amount: e.amount,
+      });
+    });
+  });
+
+  // Payments — against the work month they were for
+  payments.forEach((p) => {
+    const key =
+      !p.isExternal && p.staffId
+        ? `staff:${p.staffId}`
+        : extKey(p.externalName);
+    const month = Number(p.periodMonth ?? p.month);
+    const year = Number(p.periodYear ?? p.year);
+    touch(
+      key,
+      p.isExternal ? p.externalName : staffById.get(p.staffId)?.name,
+      !!p.isExternal || !p.staffId,
+    ).push({
+      id: p.id,
+      type: "payment",
+      date: p.date,
+      month,
+      year,
+      label: `Payment — ${MONTHS_SHORT[month]} ${year}`,
+      detail: p.reference || p.type,
+      amount: Number(p.amount) || 0,
+    });
+  });
+
+  // Deductions — in the month they are due; later instalments listed apart
+  const upcomingByPerson = new Map();
+  staffCharges
+    .filter((c) => c.status !== "waived")
+    .forEach((c) => {
+      const key =
+        !c.isExternal && c.staffId ? `staff:${c.staffId}` : extKey(c.staffName);
+      const list = touch(key, c.staffName, !!c.isExternal || !c.staffId);
+      const k = periodKey(c.deductMonth, c.deductYear);
+      if (k > nowKey) {
+        if (c.status === "outstanding") {
+          if (!upcomingByPerson.has(key)) upcomingByPerson.set(key, []);
+          upcomingByPerson.get(key).push(c);
+        }
+        return;
+      }
+      list.push({
+        id: c.id,
+        type: "deduction",
+        date: `${c.deductYear}-${String(c.deductMonth + 1).padStart(2, "0")}-28`,
+        month: c.deductMonth,
+        year: c.deductYear,
+        label: `Deduction — ${categoryLabel(c.category)}${c.description ? `: ${c.description}` : ""}`,
+        detail:
+          (c.instalments > 1
+            ? `${c.instalmentNo} of ${c.instalments} · `
+            : "") + (c.status === "deducted" ? "deducted" : "to deduct"),
+        status: c.status,
+        amount: Number(c.amount) || 0,
+      });
+    });
+
+  const sign = (l) => (l.type === "earning" ? 1 : -1);
+  const sumOf = (lines, type) =>
+    round2(
+      lines.filter((l) => l.type === type).reduce((s, l) => s + l.amount, 0),
+    );
+
+  // ── Per-person summary ─────────────────────────────────────────────────────
+  const summaries = [...people.values()]
+    .map((p) => {
+      const lines = linesByPerson.get(p.key) || [];
+      const s = p.key.startsWith("staff:")
+        ? staffById.get(p.key.slice(6))
+        : null;
+      const totalEarned = sumOf(lines, "earning");
+      const totalPaid = sumOf(lines, "payment");
+      const totalDeducted = sumOf(lines, "deduction");
+      return {
+        ...(s || {}),
+        key: p.key,
+        name: s?.name || p.name,
+        isExternal: !s,
+        totalEarned,
+        totalPaid,
+        totalDeducted,
+        balance: round2(totalEarned - totalPaid - totalDeducted), // + = we owe them
+      };
+    })
+    // External temps only show if they have any lines
+    .filter((p) => !p.isExternal || (linesByPerson.get(p.key) || []).length)
+    .sort(
+      (a, b) =>
+        Number(a.isExternal) - Number(b.isExternal) ||
+        (a.isExternal ? a.name.localeCompare(b.name) : 0),
+    );
+
+  // ── Ledger for the selected person ────────────────────────────────────────
+  const TYPE_ORDER = { earning: 0, deduction: 1, payment: 2 };
+  const getLedger = (key) =>
+    [...(linesByPerson.get(key) || [])].sort(
+      (a, b) =>
+        a.year * 100 + a.month - (b.year * 100 + b.month) ||
+        TYPE_ORDER[a.type] - TYPE_ORDER[b.type] ||
+        new Date(a.date) - new Date(b.date),
+    );
+
   const selectedSummary = selected
-    ? summaries.find((s) => s.id === selected)
+    ? summaries.find((s) => s.key === selected)
     : null;
   const ledger = selected ? getLedger(selected) : [];
 
   // Running balance per ledger line
   let running = 0;
   const ledgerWithRunning = ledger.map((line) => {
-    running += line.sign * line.amount;
+    running = round2(running + sign(line) * line.amount);
     return { ...line, running };
   });
 
@@ -178,6 +248,11 @@ export default function StaffLedger() {
   const yearPaid = filteredLedger
     .filter((l) => l.type === "payment")
     .reduce((s, l) => s + l.amount, 0);
+  const yearDeducted = filteredLedger
+    .filter((l) => l.type === "deduction")
+    .reduce((s, l) => s + l.amount, 0);
+  const yearBalance = round2(yearEarned - yearPaid - yearDeducted);
+  const upcoming = selected ? upcomingByPerson.get(selected) || [] : [];
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -197,10 +272,10 @@ export default function StaffLedger() {
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
               {summaries.map((s) => (
                 <button
-                  key={s.id}
-                  onClick={() => setSelected(s.id)}
+                  key={s.key}
+                  onClick={() => setSelected(s.key)}
                   className={`w-full text-left px-4 py-3 transition-colors ${
-                    selected === s.id
+                    selected === s.key
                       ? "bg-blue-50 dark:bg-blue-900/20"
                       : "hover:bg-gray-50 dark:hover:bg-gray-800"
                   }`}
@@ -215,7 +290,9 @@ export default function StaffLedger() {
                           {s.name}
                         </p>
                         <p className="muted capitalize">
-                          {s.type?.replace("_", " ")}
+                          {s.isExternal
+                            ? "External temp"
+                            : s.type?.replace("_", " ")}
                         </p>
                       </div>
                     </div>
@@ -227,6 +304,11 @@ export default function StaffLedger() {
                     <div className="mt-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                       <span>Earned: {fmt(s.totalEarned)}</span>
                       <span>Paid: {fmt(s.totalPaid)}</span>
+                    </div>
+                  )}
+                  {s.totalDeducted > 0 && (
+                    <div className="mt-0.5 text-right text-xs text-amber-600 dark:text-amber-400">
+                      Deducted: {fmt(s.totalDeducted)}
                     </div>
                   )}
                 </button>
@@ -263,7 +345,11 @@ export default function StaffLedger() {
                   <p className="text-xl font-semibold text-gray-900 dark:text-gray-100">
                     {fmt(selectedSummary.totalPaid)}
                   </p>
-                  <p className="muted mt-0.5">all time</p>
+                  <p className="muted mt-0.5">
+                    {selectedSummary.totalDeducted > 0
+                      ? `+ ${fmt(selectedSummary.totalDeducted)} deducted`
+                      : "all time"}
+                  </p>
                 </div>
                 <div className="metric">
                   <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
@@ -290,7 +376,9 @@ export default function StaffLedger() {
                   <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
                     Bank details
                   </p>
-                  {selectedSummary.accountNo ? (
+                  {selectedSummary.isExternal ? (
+                    <p className="muted">External temp — not on staff list</p>
+                  ) : selectedSummary.accountNo ? (
                     <>
                       <p className="text-sm font-mono text-gray-900 dark:text-gray-100">
                         {selectedSummary.sortCode}
@@ -344,12 +432,20 @@ export default function StaffLedger() {
                       {fmt(yearPaid)}
                     </span>
                   </span>
+                  {yearDeducted > 0 && (
+                    <span className="text-gray-500 dark:text-gray-400">
+                      {yearF} deducted:{" "}
+                      <span className="font-semibold text-amber-600 dark:text-amber-400">
+                        {fmt(yearDeducted)}
+                      </span>
+                    </span>
+                  )}
                   <span className="text-gray-500 dark:text-gray-400">
                     {yearF} balance:{" "}
                     <span
-                      className={`font-semibold ${yearEarned - yearPaid > 0 ? "text-amber-600 dark:text-amber-400" : yearEarned - yearPaid < 0 ? "text-red-500" : "text-green-700 dark:text-green-400"}`}
+                      className={`font-semibold ${yearBalance > 0.01 ? "text-amber-600 dark:text-amber-400" : yearBalance < -0.01 ? "text-red-500" : "text-green-700 dark:text-green-400"}`}
                     >
-                      {fmt(yearEarned - yearPaid)}
+                      {fmt(yearBalance)}
                     </span>
                   </span>
                 </div>
@@ -360,7 +456,7 @@ export default function StaffLedger() {
                 <EmptyState
                   icon="📭"
                   title="No transactions"
-                  description="No earnings or payments recorded for this period."
+                  description="No earnings, payments or deductions recorded for this period."
                 />
               ) : (
                 <div className="card overflow-hidden">
@@ -372,6 +468,7 @@ export default function StaffLedger() {
                         <th className="th">Detail</th>
                         <th className="th-r">Earned</th>
                         <th className="th-r">Paid</th>
+                        <th className="th-r">Deducted</th>
                         <th className="th-r">Running balance</th>
                       </tr>
                     </thead>
@@ -382,7 +479,9 @@ export default function StaffLedger() {
                           className={`tr ${
                             line.type === "earning"
                               ? "bg-transparent"
-                              : "bg-blue-50/30 dark:bg-blue-900/10"
+                              : line.type === "deduction"
+                                ? "bg-amber-50/40 dark:bg-amber-900/10"
+                                : "bg-blue-50/30 dark:bg-blue-900/10"
                           }`}
                         >
                           <td className="td text-gray-500 dark:text-gray-400 whitespace-nowrap">
@@ -394,7 +493,9 @@ export default function StaffLedger() {
                                 className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                                   line.type === "earning"
                                     ? "bg-green-500"
-                                    : "bg-blue-500"
+                                    : line.type === "deduction"
+                                      ? "bg-amber-500"
+                                      : "bg-blue-500"
                                 }`}
                               />
                               <span className="text-sm text-gray-900 dark:text-gray-100">
@@ -410,6 +511,9 @@ export default function StaffLedger() {
                           </td>
                           <td className="td-r font-medium text-blue-700 dark:text-blue-400">
                             {line.type === "payment" ? fmt(line.amount) : "—"}
+                          </td>
+                          <td className="td-r font-medium text-amber-600 dark:text-amber-400">
+                            {line.type === "deduction" ? fmt(line.amount) : "—"}
                           </td>
                           <td
                             className={`td-r font-semibold ${
@@ -430,6 +534,35 @@ export default function StaffLedger() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {/* Later instalments — not in the balance yet */}
+              {upcoming.length > 0 && (
+                <div className="px-4 py-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 text-sm">
+                  <p className="font-semibold text-amber-800 dark:text-amber-300 mb-1">
+                    Upcoming deductions (not in the balance yet)
+                  </p>
+                  <ul className="space-y-0.5 text-amber-800 dark:text-amber-300">
+                    {[...upcoming]
+                      .sort(
+                        (a, b) =>
+                          periodKey(a.deductMonth, a.deductYear) -
+                          periodKey(b.deductMonth, b.deductYear),
+                      )
+                      .map((c) => (
+                        <li key={c.id} className="flex justify-between gap-3">
+                          <span>
+                            {MONTHS_SHORT[c.deductMonth]} {c.deductYear} —{" "}
+                            {categoryLabel(c.category)}
+                            {c.instalments > 1
+                              ? ` (${c.instalmentNo} of ${c.instalments})`
+                              : ""}
+                          </span>
+                          <span className="font-semibold">{fmt(c.amount)}</span>
+                        </li>
+                      ))}
+                  </ul>
                 </div>
               )}
             </div>

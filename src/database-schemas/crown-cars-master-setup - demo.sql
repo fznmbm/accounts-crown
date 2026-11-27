@@ -1136,3 +1136,154 @@ grant execute on function public.get_staff_info_for_portal(text, text) to anon, 
 
 -- ── 9. MOT expiry (compliance) ─────────────────────────────────────────────
 alter table public.staff_licences add column if not exists mot_expiry date;
+
+-- ============================================================
+-- 14. UPDATE 2026-11-26 — DEMO DATABASE ONLY: weekly reset
+-- Resets the Sunrise Transport demo every Monday 02:00 (UTC).
+-- Now also clears deductions (staff_charges).
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.reset_demo_data()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path = public
+AS $function$
+declare
+  demo_uid uuid := 'f31a4d03-f72c-4d6b-89ff-4027ee739459'::uuid;
+begin
+
+  -- Clear in FK-safe order
+  delete from public.staff_charges             where user_id = demo_uid;
+  delete from public.audit_log                 where user_id = demo_uid;
+  delete from public.staff_portal_tokens       where user_id = demo_uid;
+  delete from public.staff_invoice_submissions where user_id = demo_uid;
+  delete from public.staff_applications        where target_user_id = demo_uid;
+  delete from public.staff_training            where user_id = demo_uid;
+  delete from public.staff_licences            where user_id = demo_uid;
+  delete from public.attendance                where user_id = demo_uid;
+  delete from public.school_holidays           where user_id = demo_uid;
+  delete from public.allocations               where user_id = demo_uid;
+  delete from public.payments                  where user_id = demo_uid;
+  delete from public.remittances               where user_id = demo_uid;
+  delete from public.invoices                  where user_id = demo_uid;
+  delete from public.routes                    where user_id = demo_uid;
+  delete from public.billing_recipients        where owner_user_id = demo_uid;
+  delete from public.staff                     where user_id = demo_uid;
+  delete from public.settings                  where user_id = demo_uid;
+
+  -- Settings
+  insert into public.settings (id, user_id, data) values (
+    demo_uid::text, demo_uid,
+    '{"companyName":"Sunrise Transport Ltd","address":"14 Station Road\nHorsham\nWest Sussex\nRH12 1HT","phone":"01403 752891","email":"admin@sunrisetransport.co.uk","vatNumber":"GB 456 7890 12","vatRate":20,"accountName":"Sunrise Transport Ltd","accountNo":"76543210","sortCode":"40-47-84","supplierNumber":"","cloudinaryCloudName":"","cloudinaryUploadPreset":"","logoUrl":"","licensingAuthorities":["Crawley","Mid Sussex","Horsham","Worthing","Adur","Other"],"trainingTypes":[{"name":"Safeguarding","renewalYears":3},{"name":"Disability Awareness","renewalYears":3},{"name":"Challenging Behaviour","renewalYears":3},{"name":"First Aid","renewalYears":3},{"name":"Manual Handling","renewalYears":2}]}'::jsonb
+  );
+
+  -- Billing recipient
+  insert into public.billing_recipients (id, owner_user_id, name, short_name, address, email, phone, supplier_ref, is_default, active, last_invoice_number, notes, created_at) values
+  ('demo_br_001', demo_uid, 'West Sussex County Council', 'WSCC', 'County Hall' || chr(10) || 'West Street' || chr(10) || 'Chichester' || chr(10) || 'PO19 1RQ', 'WSCCaccountspayable@westsussex.gov.uk', '01243 642136', '204751', true, true, 2003, '', 1700000000000);
+
+  -- Staff
+  insert into public.staff (id, user_id, name, short_name, type, phone, email, date_of_birth, nationality, status, address, bank_name, account_no, sort_code, notes, documents, created_at) values
+  ('demo_staff_001', demo_uid, 'James Holloway', 'James', 'driver', '07712 334 891', 'j.holloway@email.com', '1978-04-12', 'British', 'active', '23 Oak Avenue, Horsham, RH12 2BT', 'Lloyds Bank', '87654321', '30-65-01', 'Reliable, 8 years experience. First aid renewal overdue.', '[]', 1700000001000),
+  ('demo_staff_002', demo_uid, 'Karen Patel', 'Karen', 'driver', '07823 445 992', 'k.patel@email.com', '1985-09-23', 'British', 'active', '8 Birchwood Close, Crawley, RH10 3NP', 'Barclays', '23456789', '20-18-03', 'SEN-trained driver. Insurance renewal due July.', '[]', 1700000002000),
+  ('demo_staff_003', demo_uid, 'David Okafor', 'Dave', 'driver', '07634 556 113', 'd.okafor@email.com', '1990-02-15', 'British', 'active', '41 Maple Street, Crawley, RH11 7QR', 'NatWest', '34567890', '60-12-34', 'Part-time Mon/Wed/Fri. Covers Karen when needed.', '[]', 1700000003000),
+  ('demo_staff_004', demo_uid, 'Michelle Carter', 'Michelle', 'pa', '07856 778 335', 'm.carter@email.com', '1988-11-05', 'British', 'active', '62 Pine Road, Crawley, RH10 6DS', 'HSBC', '56789012', '40-14-09', 'Qualified SEN PA. First aid certified Level 3.', '[]', 1700000004000);
+
+  -- Routes
+  insert into public.routes (id, user_id, number, name, po_number, school, primary_driver_id, primary_pa_id, daily_rate, driver_daily_rate, pa_daily_rate, pa_pay_rate, rate_bands, operational_days, active, suspended, contract_start, contract_end, documents, notes, client_id, created_at) values
+  ('demo_route_001', demo_uid, '50540', 'Philpots School Run', 'WSP000004701', 'Hazelwick Academy', 'demo_staff_001', null, 140.26, 95.00, 0.00, 0.00, '[]', '[1,2,3,4,5]', true, false, '2025-09-01', '2026-07-18', '[]', '3 pupils. AM only.', 'demo_br_001', 1700000001000),
+  ('demo_route_002', demo_uid, '50641', 'Broadfield Morning Run', 'WSP000004856', 'Broadfield Academy', 'demo_staff_002', 'demo_staff_004', 107.40, 72.00, 35.40, 28.00, '[]', '[1,2,3,4,5]', true, false, '2025-09-01', '2026-07-18', '[]', 'SEN route. 2 pupils. PA required.', 'demo_br_001', 1700000002000),
+  ('demo_route_003', demo_uid, '50732', 'Oriel High AM', 'WSP000004923', 'Oriel High School', 'demo_staff_003', null, 134.20, 90.00, 0.00, 0.00, '[]', '[1,3,5]', true, false, '2025-09-01', '2026-07-18', '[]', 'Mon/Wed/Fri only.', 'demo_br_001', 1700000003000);
+
+  -- Invoices
+  insert into public.invoices (id, user_id, invoice_number, po_number, invoice_date, month, year, route_number, route_name, days_worked, unit_price, net_total, vat, total, status, paid_amount, remittance_id, file_name, is_revised, revised_by, revision_note, original_invoice_id, notes, client_id, created_at) values
+  ('demo_inv_001', demo_uid, '2001', 'WSP000004701', '2026-05-01', 3, 2026, '50540', 'Philpots School Run', 22, 140.26, 3085.72, 617.14, 3702.86, 'paid', 3702.86, 'demo_rem_001', 'INV-2001-R50540-Apr2026.pdf', false, null, '', null, '', 'demo_br_001', 1746057600000),
+  ('demo_inv_002', demo_uid, '2002', 'WSP000004856', '2026-05-01', 3, 2026, '50641', 'Broadfield Morning Run', 22, 142.80, 3141.60, 628.32, 3769.92, 'paid', 3769.92, 'demo_rem_001', 'INV-2002-R50641-Apr2026.pdf', false, null, '', null, '', 'demo_br_001', 1746057600000),
+  ('demo_inv_003', demo_uid, '2003', 'WSP000004923', '2026-05-01', 3, 2026, '50732', 'Oriel High AM', 14, 134.20, 1878.80, 375.76, 2254.56, 'paid', 2254.56, 'demo_rem_001', 'INV-2003-R50732-Apr2026.pdf', false, null, '', null, 'Mon/Wed/Fri — 14 days', 'demo_br_001', 1746057600000),
+  ('demo_inv_004', demo_uid, '2004', 'WSP000004701', '2026-06-01', 4, 2026, '50540', 'Philpots School Run', 19, 140.26, 2664.94, 532.99, 3197.93, 'unpaid', 0, null, 'INV-2004-R50540-May2026.pdf', false, null, '', null, '', 'demo_br_001', 1748736000000),
+  ('demo_inv_005', demo_uid, '2005', 'WSP000004856', '2026-06-01', 4, 2026, '50641', 'Broadfield Morning Run', 19, 142.80, 2713.20, 542.64, 3255.84, 'unpaid', 0, null, 'INV-2005-R50641-May2026.pdf', false, null, '', null, '', 'demo_br_001', 1748736000000),
+  ('demo_inv_006', demo_uid, '2006', 'WSP000004923', '2026-06-01', 4, 2026, '50732', 'Oriel High AM', 12, 134.20, 1610.40, 322.08, 1932.48, 'unpaid', 0, null, 'INV-2006-R50732-May2026.pdf', false, null, '', null, 'Mon/Wed/Fri — 12 days', 'demo_br_001', 1748736000000);
+
+  -- Remittance
+  insert into public.remittances (id, user_id, payment_number, total, payment_date, items, file_name, created_at) values
+  ('demo_rem_001', demo_uid, '31491', 9727.34, '2026-05-15', '[{"invoiceNumber":"2001","amount":3702.86},{"invoiceNumber":"2002","amount":3769.92},{"invoiceNumber":"2003","amount":2254.56}]'::jsonb, 'WSCC-Remittance-31491-May2026.pdf', 1747267200000);
+
+  -- Allocations
+  insert into public.allocations (id, user_id, route_id, route_number, route_name, month, year, total_days, regular_staff_id, regular_days, regular_rate, regular_amount, temp_staff_id, temp_staff_name, temp_days, temp_rate, temp_amount, cover_entries, absence_reason, notes, pa_staff_id, pa_staff_name, pa_days, pa_rate, pa_amount, additive_entries, has_rate_split, created_at) values
+  ('demo_alloc_001', demo_uid, 'demo_route_001', '50540', 'Philpots School Run', 3, 2026, 22, 'demo_staff_001', 22, 95.00, 2090.00, null, null, 0, 0.00, 0.00, '[]', '', '', null, null, 0, 0.00, 0.00, '[]', false, 1746057600000),
+  ('demo_alloc_002', demo_uid, 'demo_route_002', '50641', 'Broadfield Morning Run', 3, 2026, 22, 'demo_staff_002', 20, 72.00, 1440.00, null, null, 0, 0.00, 0.00, '[{"staffId":"demo_staff_003","staffName":"David Okafor","days":2,"rate":72.00,"amount":144.00}]', 'Sick leave', 'Karen absent Tue 14 & Thu 16 Apr — David covered', 'demo_staff_004', 'Michelle Carter', 22, 28.00, 616.00, '[]', false, 1746057600000),
+  ('demo_alloc_003', demo_uid, 'demo_route_003', '50732', 'Oriel High AM', 3, 2026, 14, 'demo_staff_003', 14, 90.00, 1260.00, null, null, 0, 0.00, 0.00, '[]', '', 'Mon/Wed/Fri only — 14 days in April', null, null, 0, 0.00, 0.00, '[]', false, 1746057600000);
+
+  -- Payments
+  insert into public.payments (id, user_id, staff_id, amount, date, type, month, year, reference, notes, allocation_ids, period_month, period_year, is_external, created_at) values
+  ('demo_pay_001', demo_uid, 'demo_staff_001', 2090.00, '2026-05-25', 'bacs', 3, 2026, 'PAY-APR26-JAMES', 'April 2026 — Route 50540', '["demo_alloc_001"]', 3, 2026, false, 1748131200000),
+  ('demo_pay_002', demo_uid, 'demo_staff_002', 1440.00, '2026-05-25', 'bacs', 3, 2026, 'PAY-APR26-KAREN', 'April 2026 — Route 50641', '["demo_alloc_002"]', 3, 2026, false, 1748131200000),
+  ('demo_pay_003', demo_uid, 'demo_staff_004', 616.00, '2026-05-25', 'bacs', 3, 2026, 'PAY-APR26-MICHELLE', 'April 2026 — PA Route 50641', '["demo_alloc_002"]', 3, 2026, false, 1748131200000);
+
+  -- Attendance
+  insert into public.attendance (id, user_id, month, year, date, route_id, route_number, status, days_value, is_split_run, driver_id, driver_name, is_cover_driver, pa_id, pa_name, is_external_driver, is_external_pa, children_attendance, no_run_reason, notes, created_at) values
+  ('demo_att_001', demo_uid, 3, 2026, '2026-04-14', 'demo_route_001', '50540', 'ran', 1, false, 'demo_staff_001', 'James Holloway', false, null, null, false, false, '[]', null, '', 1776124800000),
+  ('demo_att_002', demo_uid, 3, 2026, '2026-04-14', 'demo_route_002', '50641', 'ran', 1, false, 'demo_staff_002', 'Karen Patel', false, 'demo_staff_004', 'Michelle Carter', false, false, '[]', null, '', 1776124800000),
+  ('demo_att_003', demo_uid, 3, 2026, '2026-04-14', 'demo_route_003', '50732', 'ran', 1, false, 'demo_staff_003', 'David Okafor', false, null, null, false, false, '[]', null, '', 1776124800000),
+  ('demo_att_004', demo_uid, 3, 2026, '2026-04-15', 'demo_route_001', '50540', 'ran', 1, false, 'demo_staff_001', 'James Holloway', false, null, null, false, false, '[]', null, '', 1776211200000),
+  ('demo_att_005', demo_uid, 3, 2026, '2026-04-15', 'demo_route_002', '50641', 'ran', 1, false, 'demo_staff_003', 'David Okafor', true, 'demo_staff_004', 'Michelle Carter', false, false, '[]', null, 'Karen sick — David covering', 1776211200000),
+  ('demo_att_006', demo_uid, 3, 2026, '2026-04-16', 'demo_route_001', '50540', 'ran', 1, false, 'demo_staff_001', 'James Holloway', false, null, null, false, false, '[]', null, '', 1776297600000),
+  ('demo_att_007', demo_uid, 3, 2026, '2026-04-16', 'demo_route_002', '50641', 'ran', 1, false, 'demo_staff_002', 'Karen Patel', false, 'demo_staff_004', 'Michelle Carter', false, false, '[]', null, '', 1776297600000),
+  ('demo_att_008', demo_uid, 3, 2026, '2026-04-16', 'demo_route_003', '50732', 'ran', 1, false, 'demo_staff_003', 'David Okafor', false, null, null, false, false, '[]', null, '', 1776297600000),
+  ('demo_att_009', demo_uid, 3, 2026, '2026-04-17', 'demo_route_001', '50540', 'ran', 1, false, 'demo_staff_001', 'James Holloway', false, null, null, false, false, '[]', null, '', 1776384000000),
+  ('demo_att_010', demo_uid, 3, 2026, '2026-04-17', 'demo_route_002', '50641', 'ran', 1, false, 'demo_staff_003', 'David Okafor', true, 'demo_staff_004', 'Michelle Carter', false, false, '[]', null, 'Karen sick — David covering', 1776384000000),
+  ('demo_att_011', demo_uid, 3, 2026, '2026-04-18', 'demo_route_001', '50540', 'ran', 1, false, 'demo_staff_001', 'James Holloway', false, null, null, false, false, '[]', null, '', 1776470400000),
+  ('demo_att_012', demo_uid, 3, 2026, '2026-04-18', 'demo_route_002', '50641', 'ran', 1, false, 'demo_staff_002', 'Karen Patel', false, 'demo_staff_004', 'Michelle Carter', false, false, '[]', null, '', 1776470400000),
+  ('demo_att_013', demo_uid, 3, 2026, '2026-04-18', 'demo_route_003', '50732', 'ran', 1, false, 'demo_staff_003', 'David Okafor', false, null, null, false, false, '[]', null, '', 1776470400000);
+
+  -- School holidays
+  insert into public.school_holidays (id, user_id, date, label, type, all_routes, route_ids, month, year, created_at) values
+  ('demo_hol_001', demo_uid, '2026-04-03', 'Good Friday',            'bank_holiday',   true, '[]', 3, 2026, 1700000001000),
+  ('demo_hol_002', demo_uid, '2026-04-06', 'Easter Monday',          'bank_holiday',   true, '[]', 3, 2026, 1700000001000),
+  ('demo_hol_003', demo_uid, '2026-04-07', 'Easter School Holiday',  'school_holiday', true, '[]', 3, 2026, 1700000001000),
+  ('demo_hol_004', demo_uid, '2026-04-08', 'Easter School Holiday',  'school_holiday', true, '[]', 3, 2026, 1700000001000),
+  ('demo_hol_005', demo_uid, '2026-05-04', 'Early May Bank Holiday', 'bank_holiday',   true, '[]', 4, 2026, 1700000001000);
+
+  -- Staff licences
+  insert into public.staff_licences (id, user_id, staff_id, authority, driver_licence_number, driver_licence_expiry, vehicle_make, vehicle_model, vehicle_colour, vehicle_registration, vehicle_licence_number, vehicle_licence_expiry, insurance_expiry, documents, notes, created_at) values
+  ('demo_lic_001', demo_uid, 'demo_staff_001', 'Horsham',  'HOLLA781234JH9AB', '2029-04-12', 'Toyota',     'Proace',   'Silver', 'HT23 XYZ', 'HM-DRV-4421', '2026-06-30', '2027-01-01', '[]', 'Vehicle licence expires 30 Jun 2026.', 1700000001000),
+  ('demo_lic_002', demo_uid, 'demo_staff_002', 'Crawley',  'PATEL851234KP5CD', '2030-09-23', 'Ford',       'Tourneo',  'White',  'CW22 ABC', 'CW-DRV-8832', '2027-07-20', '2026-07-05', '[]', 'Insurance due renewal Jul 2026.',      1700000002000),
+  ('demo_lic_003', demo_uid, 'demo_staff_003', 'Crawley',  'OKFOR901234DO3EF', '2031-02-15', 'Volkswagen', 'Caravelle','Black',  'CW71 DEF', 'CW-DRV-9941', '2027-01-10', '2027-06-01', '[]', 'Part-time Mon/Wed/Fri.',               1700000003000);
+
+  -- Staff training
+  insert into public.staff_training (id, user_id, staff_id, training_type, renewal_years, completed_date, expiry_date, certificate_url, notes, created_at) values
+  ('demo_trn_001', demo_uid, 'demo_staff_001', 'Safeguarding',         3, '2024-09-10', '2027-09-10', null, '',                       1700000001000),
+  ('demo_trn_002', demo_uid, 'demo_staff_001', 'Disability Awareness', 3, '2024-09-10', '2027-09-10', null, '',                       1700000001000),
+  ('demo_trn_003', demo_uid, 'demo_staff_001', 'First Aid',            3, '2023-05-01', '2026-05-01', null, 'EXPIRED — renewal overdue', 1700000001000),
+  ('demo_trn_004', demo_uid, 'demo_staff_002', 'Safeguarding',         3, '2025-01-20', '2028-01-20', null, '',                       1700000002000),
+  ('demo_trn_005', demo_uid, 'demo_staff_002', 'Disability Awareness', 3, '2025-01-20', '2028-01-20', null, '',                       1700000002000),
+  ('demo_trn_006', demo_uid, 'demo_staff_002', 'Challenging Behaviour',3, '2025-01-20', '2028-01-20', null, '',                       1700000002000),
+  ('demo_trn_007', demo_uid, 'demo_staff_003', 'Safeguarding',         3, '2024-11-05', '2027-11-05', null, '',                       1700000003000),
+  ('demo_trn_008', demo_uid, 'demo_staff_003', 'First Aid',            3, '2024-11-05', '2027-11-05', null, '',                       1700000003000),
+  ('demo_trn_009', demo_uid, 'demo_staff_004', 'Safeguarding',         3, '2025-03-14', '2028-03-14', null, '',                       1700000004000),
+  ('demo_trn_010', demo_uid, 'demo_staff_004', 'Challenging Behaviour',3, '2025-03-14', '2028-03-14', null, '',                       1700000004000);
+
+  -- Portal token
+  insert into public.staff_portal_tokens (id, user_id, staff_id, staff_name, token, active, created_at) values
+  ('demo_tok_001', demo_uid, 'demo_staff_001', 'James Holloway', 'DEMO-PORTAL-JAMES-2026', true, 1700000001000);
+
+  -- Invoice submission
+  insert into public.staff_invoice_submissions (id, user_id, token_id, staff_id, staff_name, month, year, route_entries, cover_entries, days_confirmed, invoice_number, invoice_amount, period_from, period_to, signature_name, signature_date, notes, status, submitted_at, approved_at, payment_id, created_at) values
+  ('demo_sub_001', demo_uid, 'demo_tok_001', 'demo_staff_001', 'James Holloway', 3, 2026,
+   '[{"routeName":"50540 Philpots School Run","days":[{"date":"2026-04-01","amount":95},{"date":"2026-04-02","amount":95},{"date":"2026-04-09","amount":95},{"date":"2026-04-10","amount":95},{"date":"2026-04-13","amount":95},{"date":"2026-04-14","amount":95},{"date":"2026-04-15","amount":95},{"date":"2026-04-16","amount":95},{"date":"2026-04-17","amount":95},{"date":"2026-04-20","amount":95},{"date":"2026-04-21","amount":95},{"date":"2026-04-22","amount":95},{"date":"2026-04-23","amount":95},{"date":"2026-04-24","amount":95},{"date":"2026-04-27","amount":95},{"date":"2026-04-28","amount":95},{"date":"2026-04-29","amount":95},{"date":"2026-04-30","amount":95},{"date":"2026-05-05","amount":95},{"date":"2026-05-06","amount":95},{"date":"2026-05-07","amount":95},{"date":"2026-05-08","amount":95}],"weekendDays":[],"total":2090}]'::jsonb,
+   '[]'::jsonb, 22, null, 2090.00, '2026-04-01', '2026-04-30', 'James Holloway', '2026-05-01', null, 'submitted', 1746144000000, null, null, 1746144000000);
+
+  -- Application
+  insert into public.staff_applications (id, target_user_id, position_type, full_name, email, phone, current_address, nationality, has_uk_driving_licence, requires_work_permit, has_convictions, dbs_registered, dbs_name, dbs_dob, dbs_cert_number, dbs_update_id, applicant_refs, declaration_agreed, declaration_name, declaration_date, status, admin_notes, created_at) values
+  ('demo_app_001', demo_uid, 'driver', 'Tom Bradley', 'tbradley.driver@email.com', '07834 567 890', '15 Beech Way, Crawley, RH11 8QT', 'British', true, false, false, true, 'Tom Bradley', '1991-07-22', 'DBS-2024-00123456', 'UPD-00987654', '[{"name":"Mike Johnson","phone":"07712 000111","relationship":"Previous employer","address":"Brighton Transport Ltd, BN1 2AB"},{"name":"Sarah Chen","phone":"07823 000222","relationship":"Character reference","address":"12 Oak Street, Horsham, RH12 3AB"}]'::jsonb, true, 'Tom Bradley', '2026-05-15', 'pending', null, 1747267200000);
+
+end;
+$function$;
+
+create extension if not exists pg_cron;
+do $$
+begin
+  perform cron.unschedule(jobname) from cron.job
+   where jobname in ('demo-reset-every-2-days', 'demo-weekly-reset');
+end $$;
+select cron.schedule('demo-weekly-reset', '0 2 * * 1', 'select public.reset_demo_data()');
