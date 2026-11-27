@@ -42,7 +42,7 @@ export default function Modal({ title, onClose, children, size = "md" }) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 dark:bg-black/70 backdrop-blur-sm"
       onMouseDown={(e) => {
         downOnBackdropRef.current = e.target === e.currentTarget;
       }}
@@ -55,17 +55,17 @@ export default function Modal({ title, onClose, children, size = "md" }) {
         role="dialog"
         aria-modal="true"
         aria-label={typeof title === "string" ? title : undefined}
-        className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl dark:shadow-black/40 w-full ${widths[size]} max-h-[90vh] flex flex-col border border-gray-100 dark:border-gray-700`}
+        className={`relative bg-white dark:bg-gray-800 shadow-xl dark:shadow-black/40 w-full ${widths[size]} h-dvh max-h-dvh sm:h-auto sm:max-h-[90vh] flex flex-col rounded-none sm:rounded-2xl border-0 sm:border border-gray-100 dark:border-gray-700`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+          <h2 className="min-w-0 text-base font-semibold text-gray-900 dark:text-gray-100">
             {title}
           </h2>
           <button
             onClick={requestClose}
             aria-label="Close"
-            className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 dark:text-gray-500
+            className="w-11 h-11 -mr-2 sm:mr-0 sm:w-7 sm:h-7 flex-shrink-0 flex items-center justify-center rounded-full text-gray-400 dark:text-gray-500
                        hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
           >
             ✕
@@ -73,7 +73,7 @@ export default function Modal({ title, onClose, children, size = "md" }) {
         </div>
         {/* Body */}
         <div
-          className="overflow-y-auto flex-1 px-6 py-5"
+          className="overflow-y-auto overscroll-contain flex-1 px-4 sm:px-6 py-4 sm:py-5"
           onInput={() => {
             dirtyRef.current = true;
           }}
@@ -83,7 +83,7 @@ export default function Modal({ title, onClose, children, size = "md" }) {
 
         {/* Discard unsaved changes? */}
         {askDiscard && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/80 dark:bg-gray-900/80 backdrop-blur-[1px] p-6">
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-none sm:rounded-2xl bg-white/80 dark:bg-gray-900/80 backdrop-blur-[1px] p-6">
             <div className="w-full max-w-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg p-5 space-y-4">
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -127,13 +127,20 @@ export function FormField({ label, children, hint }) {
 }
 
 export function FormGrid({ cols = 2, children }) {
-  const gridCols = { 1: "grid-cols-1", 2: "grid-cols-2", 3: "grid-cols-3" };
+  // One column on phones, the requested columns from 640px up
+  const gridCols = {
+    1: "grid-cols-1",
+    2: "grid-cols-1 sm:grid-cols-2",
+    3: "grid-cols-1 sm:grid-cols-3",
+  };
   return <div className={`grid ${gridCols[cols]} gap-4`}>{children}</div>;
 }
 
 export function ModalFooter({ children }) {
   return (
-    <div className="flex items-center justify-end gap-2 pt-4 mt-2 border-t border-gray-100 dark:border-gray-700">
+    // Stays pinned to the bottom of the form on phones so Save is always
+    // reachable; buttons share the width on phones
+    <div className="sticky -bottom-4 sm:static z-[1] -mx-4 px-4 sm:mx-0 sm:px-0 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-0 bg-white dark:bg-gray-800 flex flex-wrap items-center justify-end gap-2 pt-4 mt-2 border-t border-gray-100 dark:border-gray-700 [&>button]:flex-1 sm:[&>button]:flex-none">
       {children}
     </div>
   );
