@@ -373,8 +373,9 @@ export default function InvoiceSubmissions() {
         allocations,
         staff,
         submissions,
+        mustSubmitTypes: settings?.mustSubmitTypes,
       }),
-    [monthF, yearF, allocations, staff, submissions],
+    [monthF, yearF, allocations, staff, submissions, settings],
   );
   const toChase = expected.people.filter((p) => p.needsChasing);
   const toRecord = expected.people.filter((p) => p.canRecordByOffice);
@@ -562,7 +563,7 @@ export default function InvoiceSubmissions() {
       />
 
       {/* Tabs */}
-      <div className="px-6 pt-3 border-b border-gray-200 dark:border-gray-700 flex gap-1">
+      <div className="px-4 sm:px-6 pt-3 border-b border-gray-200 dark:border-gray-700 flex gap-1 overflow-x-auto flex-shrink-0">
         {[
           { id: "submissions", label: "Submissions" },
           {
@@ -576,7 +577,7 @@ export default function InvoiceSubmissions() {
               setTab(t.id);
               localStorage.setItem("sub_tab", t.id);
             }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            className={`px-4 py-2.5 sm:py-2 whitespace-nowrap text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === t.id
                 ? "border-blue-600 text-blue-700 dark:text-blue-400"
                 : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
@@ -591,7 +592,7 @@ export default function InvoiceSubmissions() {
         <>
           {/* Summary strip */}
           {filtered.length > 0 && (
-            <div className="px-6 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex items-center gap-6">
+            <div className="px-4 sm:px-6 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center gap-x-6 gap-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-500 dark:text-gray-400">
                   {filtered.length} submission{filtered.length !== 1 ? "s" : ""}
@@ -615,7 +616,7 @@ export default function InvoiceSubmissions() {
 
           <div className="flex flex-1 overflow-hidden">
             {/* ── List ── */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6">
               {filtered.length === 0 ? (
                 <EmptyState
                   icon="📄"
@@ -671,7 +672,7 @@ export default function InvoiceSubmissions() {
 
                         {/* Route summary chips */}
                         {sub.routeEntries?.length > 0 && (
-                          <div className="flex gap-2 mt-2 ml-12 flex-wrap">
+                          <div className="flex gap-2 mt-2 ml-0 sm:ml-12 flex-wrap">
                             {sub.routeEntries.map((r, i) => (
                               <span
                                 key={i}
@@ -697,7 +698,7 @@ export default function InvoiceSubmissions() {
 
                         {sub.status === "office_recorded" && (
                           <div
-                            className="flex items-center gap-3 mt-3 ml-12"
+                            className="flex flex-wrap items-center gap-3 mt-3 ml-0 sm:ml-12"
                             onClick={(e) => e.stopPropagation()}
                           >
                             {sub.notes && (
@@ -717,7 +718,7 @@ export default function InvoiceSubmissions() {
                         {(sub.status === "submitted" ||
                           sub.status === "approved") && (
                           <div
-                            className="flex gap-2 mt-3 ml-12"
+                            className="flex flex-wrap gap-2 mt-3 ml-0 sm:ml-12"
                             onClick={(e) => e.stopPropagation()}
                           >
                             {sub.status === "submitted" && (
@@ -753,9 +754,17 @@ export default function InvoiceSubmissions() {
 
             {/* ── Detail panel ── */}
             {viewing && (
-              <div className="w-96 flex-shrink-0 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-y-auto">
-                <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                  <div>
+              // Phones/tablets: full screen over the list. Desktop: side panel.
+              <div className="fixed inset-0 z-40 lg:static lg:z-auto w-full lg:w-96 flex-shrink-0 lg:border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-y-auto overscroll-contain">
+                <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 p-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between gap-2">
+                  <button
+                    onClick={() => setViewing(null)}
+                    className="lg:hidden btn-ghost -ml-2 text-sm"
+                    aria-label="Back to list"
+                  >
+                    ← Back
+                  </button>
+                  <div className="min-w-0 flex-1">
                     <h3 className="font-semibold text-gray-900 dark:text-gray-100">
                       {viewing.staffName}
                     </h3>
@@ -773,7 +782,8 @@ export default function InvoiceSubmissions() {
                     </button>
                     <button
                       onClick={() => setViewing(null)}
-                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg"
+                      className="hidden lg:inline text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg"
+                      aria-label="Close"
                     >
                       ×
                     </button>
@@ -1136,7 +1146,7 @@ export default function InvoiceSubmissions() {
 
       {/* ── Not submitted ── */}
       {tab === "missing" && (
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           {expected.people.length === 0 ? (
             <EmptyState
               icon="📭"
