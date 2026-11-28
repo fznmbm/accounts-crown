@@ -159,7 +159,7 @@ export default function Remittances() {
 
         {preview && (
           <div className="card overflow-hidden border-blue-200 dark:border-blue-800">
-            <div className="flex items-center justify-between px-5 py-3 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-800">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-5 py-3 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-800">
               <div>
                 <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
                   PDF parsed — Payment #{preview.paymentNumber}
@@ -252,7 +252,42 @@ export default function Remittances() {
                 All remittances ({remittances.length})
               </h3>
             </div>
-            <table className="min-w-full">
+            {/* Phones: one row per remittance — tap to see its invoices */}
+            <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-700">
+              {sorted.map((r) => (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer active:bg-gray-50 dark:active:bg-gray-800"
+                  onClick={() => setDetail(r)}
+                >
+                  <div className="min-w-0">
+                    <p className="font-mono font-semibold text-gray-900 dark:text-gray-100">
+                      #{r.paymentNumber}
+                    </p>
+                    <p className="muted">
+                      {fmtD(r.paymentDate)} · {r.items?.length} invoices
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <span className="text-sm font-semibold text-green-700 dark:text-green-400">
+                      {fmt(r.total)}
+                    </span>
+                    <button
+                      className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        del(r.id);
+                      }}
+                    >
+                      Del
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Tablets and desktop: table */}
+            <table className="hidden md:table min-w-full">
               <thead>
                 <tr className="thead-row">
                   <th className="th">Payment #</th>
