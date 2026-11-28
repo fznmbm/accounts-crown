@@ -1213,6 +1213,9 @@ export default function InvoiceSubmissions() {
                                   {p.name}{" "}
                                   <span className="text-xs font-normal text-gray-500 dark:text-gray-400">
                                     {CATEGORY_LABEL[p.category]}
+                                    {p.category === "regular" && !p.mustSubmit
+                                      ? " · not required to submit"
+                                      : ""}
                                   </span>
                                 </p>
                                 <div className="flex gap-1.5 mt-1 flex-wrap">

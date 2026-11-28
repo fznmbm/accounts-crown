@@ -16,7 +16,14 @@ import {
   currentYear,
   cleanNum,
   getAllocTotalCost,
+  isPaCover,
+  paDaysFromAttendance,
 } from "../lib/utils";
+
+const sumDays = (list) =>
+  (list || []).reduce((s, c) => s + (Number(c.days) || 0), 0);
+const lineAmount = (days, rate) =>
+  Math.round((Number(days) || 0) * (Number(rate) || 0) * 100) / 100;
 
 // const cleanNum = (n) =>
 //   String(n || "")
@@ -32,6 +39,7 @@ const EMPTY = {
   regularDays: "",
   regularRate: "",
   coverEntries: [],
+  paCoverEntries: [],
   absenceReason: "",
   notes: "",
   paStaffId: "",
@@ -65,10 +73,11 @@ export default function Allocations() {
     (s) => s.type === "driver" || s.type === "driver_pa",
   );
 
-  const getAttendanceSplit = (routeId, month, year) => {
+  // Attendance records for a route and month, on its run days only
+  const attendanceFor = (routeId, month, year) => {
     const route = routes.find((r) => r.id === routeId);
     const opDays = route?.operationalDays || [1, 2, 3, 4, 5];
-    const records = attendance.filter((a) => {
+    return attendance.filter((a) => {
       if (
         a.routeId !== routeId ||
         a.month !== month ||
@@ -79,6 +88,10 @@ export default function Allocations() {
       const dow = new Date(a.date).getDay();
       return opDays.includes(dow);
     });
+  };
+
+  const getAttendanceSplit = (routeId, month, year) => {
+    const records = attendanceFor(routeId, month, year);
     const byDriver = {};
     records.forEach((a) => {
       if (a.isSplitRun) {
@@ -177,6 +190,26 @@ export default function Allocations() {
       };
     });
     const primaryPA = staff.find((x) => x.id === route?.primaryPAId);
+    // PA days from attendance: the route's PA is the regular, others are cover
+    const paRateDefault = route?.paPayRate ? String(route.paPayRate) : "";
+    const paSplit = route?.primaryPAId
+      ? paDaysFromAttendance(
+          attendanceFor(routeId, Number(form.month), Number(form.year)),
+        )
+      : [];
+    const regularPA = paSplit.find((x) => x.staffId === route?.primaryPAId);
+    const paCoverEntries = paSplit
+      .filter((x) => x !== regularPA)
+      .map((x) => ({
+        id: uid(),
+        staffId: x.staffId,
+        staffName: x.name || staff.find((s) => s.id === x.staffId)?.name || "",
+        days: x.days,
+        rate: paRateDefault,
+        amount: lineAmount(x.days, paRateDefault),
+        isExternal: x.isExternal,
+        role: "pa",
+      }));
     const additiveBands = (route?.rateBands || []).filter((b) => b.isAdditive);
     const undatedReplacementBands = (route?.rateBands || []).filter(
       (b) => !b.isAdditive && !b.effectiveFrom,
@@ -208,8 +241,13 @@ export default function Allocations() {
       coverEntries,
       paStaffId: route?.primaryPAId || "",
       paStaffName: primaryPA?.name || "",
-      paRate: route?.paPayRate ? String(route.paPayRate) : "",
-      paDays: totalDays ? String(totalDays) : "",
+      paRate: paRateDefault,
+      paDays: paSplit.length
+        ? String(regularPA?.days || 0)
+        : totalDays
+          ? String(totalDays)
+          : "",
+      paCoverEntries,
       additiveEntries,
       hasRateSplit: hasUndatedReplacement,
       notes: hasUndatedReplacement
@@ -225,9 +263,10 @@ export default function Allocations() {
   };
 
   const openEdit = (a) => {
+    const driverCovers = (a.coverEntries || []).filter((c) => !isPaCover(c));
     const coverEntries =
-      a.coverEntries?.length > 0
-        ? a.coverEntries
+      driverCovers.length > 0
+        ? driverCovers
         : a.tempStaffId || a.tempStaffName
           ? [
               {
@@ -250,6 +289,7 @@ export default function Allocations() {
       regularDays: a.regularDays,
       regularRate: a.regularRate,
       coverEntries,
+      paCoverEntries: (a.coverEntries || []).filter(isPaCover),
       absenceReason: a.absenceReason || "",
       notes: a.notes || "",
       paStaffId: a.paStaffId || "",
@@ -295,14 +335,19 @@ export default function Allocations() {
       form.hasRateSplit && form.regularAmount
         ? form.regularAmount
         : calculatedAmount;
-    const coverEntries = (form.coverEntries || []).map((c) => ({
+    const toCover = (c) => ({
       ...c,
       days: Number(c.days) || 0,
       rate: Number(c.rate) || 0,
-      amount:
-        Math.round((Number(c.days) || 0) * (Number(c.rate) || 0) * 100) / 100,
-    }));
-    const first = coverEntries[0];
+      amount: lineAmount(c.days, c.rate),
+    });
+    const driverCoverEntries = (form.coverEntries || []).map(toCover);
+    // Cover PAs are stored in the same list, tagged role "pa"
+    const paCoverEntries = (form.paCoverEntries || [])
+      .map((c) => ({ ...toCover(c), role: "pa" }))
+      .filter((c) => c.days > 0 && (c.staffId || c.staffName));
+    const coverEntries = [...driverCoverEntries, ...paCoverEntries];
+    const first = driverCoverEntries[0]; // legacy single-cover fields
     const tempDays = first ? Number(first.days) || 0 : 0;
     const tempRate = first ? Number(first.rate) || 0 : 0;
     const tempAmount = first ? Number(first.amount) || 0 : 0;
@@ -397,16 +442,216 @@ export default function Allocations() {
         x.year === a.year,
     );
     if (!inv) return null;
+    const driverCovers = (a.coverEntries || []).filter((c) => !isPaCover(c));
+    const paCovers = (a.coverEntries || []).filter(isPaCover);
     const coverTotal =
       a.coverEntries?.length > 0
-        ? a.coverEntries.reduce((s, c) => s + (Number(c.days) || 0), 0)
+        ? sumDays(driverCovers)
         : Number(a.tempDays) || 0;
     const allocTotal = (Number(a.regularDays) || 0) + coverTotal;
     if (allocTotal !== a.totalDays)
-      return `Days split (${allocTotal}) doesn't match total (${a.totalDays})`;
+      return `Driver days (${allocTotal}) don't match total (${a.totalDays})`;
+    if (a.paStaffId || paCovers.length) {
+      const paTotal = (Number(a.paDays) || 0) + sumDays(paCovers);
+      if (paTotal !== a.totalDays)
+        return `PA days (${paTotal}) don't match total (${a.totalDays})`;
+    }
     if (inv.daysWorked && Number(inv.daysWorked) !== a.totalDays)
       return `Invoice has ${inv.daysWorked} days but allocation has ${a.totalDays}`;
     return null;
+  };
+
+  // ── Cover list (drivers or PAs) — same form for both ─────────────────────
+  // kind "driver" edits form.coverEntries, kind "pa" edits form.paCoverEntries
+  const renderCoverList = (kind) => {
+    const key = kind === "pa" ? "paCoverEntries" : "coverEntries";
+    const word = kind === "pa" ? "PA" : "driver";
+    const list = form[key] || [];
+    const options =
+      kind === "pa"
+        ? staff.filter((s) => s.type === "pa" || s.type === "driver_pa")
+        : staff;
+    const regularRate =
+      kind === "pa" ? Number(form.paRate) : Number(form.regularRate);
+    const update = (i, patch) =>
+      setForm((p) => ({
+        ...p,
+        [key]: (p[key] || []).map((x, j) => (j === i ? { ...x, ...patch } : x)),
+      }));
+    const money = (d, r) =>
+      Math.round((Number(d) || 0) * (Number(r) || 0) * 100) / 100;
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="label">
+            Cover {word}s{" "}
+            <span className="text-gray-400 dark:text-gray-500 normal-case font-normal">
+              {kind === "pa" ? "(when the regular PA is off)" : "(optional)"}
+            </span>
+          </p>
+          <button
+            type="button"
+            className="btn-ghost text-xs"
+            onClick={() =>
+              setForm((p) => ({
+                ...p,
+                [key]: [
+                  ...(p[key] || []),
+                  {
+                    id: uid(),
+                    staffId: "",
+                    staffName: "",
+                    days: "",
+                    rate: (kind === "pa" ? p.paRate : p.regularRate) || "",
+                    amount: 0,
+                    isExternal: false,
+                    ...(kind === "pa" ? { role: "pa" } : {}),
+                  },
+                ],
+              }))
+            }
+          >
+            + Add cover {word}
+          </button>
+        </div>
+        {list.length === 0 && (
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            No cover {word}s — tap "+ Add cover {word}" to add one.
+          </p>
+        )}
+        {list.some(
+          (c) => Number(c.rate) > 0 && Number(c.rate) === regularRate,
+        ) && (
+          <div className="alert-warn text-xs text-amber-700 dark:text-amber-400">
+            ⚠ Cover rate matches the regular {word}'s rate — adjust if this{" "}
+            {word} is paid differently.
+          </div>
+        )}
+        {list.map((c, i) => (
+          <div
+            key={c.id}
+            className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg space-y-2"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                Cover {word} {i + 1}
+              </p>
+              <button
+                type="button"
+                className="btn-ghost text-xs text-red-500 hover:text-red-700"
+                onClick={() =>
+                  setForm((p) => ({
+                    ...p,
+                    [key]: (p[key] || []).filter((_, j) => j !== i),
+                  }))
+                }
+              >
+                Remove
+              </button>
+            </div>
+            <FormField label="Staff member">
+              {c.isExternal ? (
+                <input
+                  className="input text-sm"
+                  value={c.staffName}
+                  onChange={(e) => update(i, { staffName: e.target.value })}
+                  placeholder={`External ${word} name…`}
+                />
+              ) : (
+                <select
+                  className="input text-sm"
+                  value={c.staffId}
+                  onChange={(e) => {
+                    const s = staff.find((x) => x.id === e.target.value);
+                    update(i, {
+                      staffId: e.target.value,
+                      staffName: s?.name || "",
+                    });
+                  }}
+                >
+                  <option value="">Select staff…</option>
+                  {options.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <label className="flex items-center gap-2 mt-1 py-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={c.isExternal || false}
+                  onChange={(e) =>
+                    update(i, {
+                      isExternal: e.target.checked,
+                      staffId: "",
+                      staffName: "",
+                    })
+                  }
+                  className="w-4 h-4 rounded"
+                />
+                External / temp (not in staff list)
+              </label>
+            </FormField>
+            <FormGrid cols={2}>
+              <FormField label="Days covered">
+                <input
+                  className="input text-sm"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.5"
+                  value={c.days}
+                  onChange={(e) =>
+                    update(i, {
+                      days: e.target.value,
+                      amount: money(e.target.value, c.rate),
+                    })
+                  }
+                  placeholder="0"
+                />
+              </FormField>
+              <FormField
+                label="Rate (£/day)"
+                hint={`Adjust if different from the regular ${word}`}
+              >
+                <input
+                  className="input text-sm"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  value={c.rate}
+                  onChange={(e) =>
+                    update(i, {
+                      rate: e.target.value,
+                      amount: money(c.days, e.target.value),
+                    })
+                  }
+                  placeholder="0.00"
+                />
+              </FormField>
+            </FormGrid>
+            {c.days && c.rate && (
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Owed:{" "}
+                <span className="font-semibold text-gray-900 dark:text-gray-100">
+                  {fmt(money(c.days, c.rate))}
+                </span>
+              </p>
+            )}
+          </div>
+        ))}
+        {list.length > 0 && (
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Total cover {word} owed:{" "}
+            <span className="font-semibold text-gray-900 dark:text-gray-100">
+              {fmt(list.reduce((s, c) => s + money(c.days, c.rate), 0))}
+            </span>
+          </p>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -557,7 +802,7 @@ export default function Allocations() {
                           {(() => {
                             const entries =
                               a.coverEntries?.length > 0
-                                ? a.coverEntries
+                                ? a.coverEntries.filter((c) => !isPaCover(c))
                                 : a.tempDays > 0
                                   ? [
                                       {
@@ -620,11 +865,34 @@ export default function Allocations() {
                           })()}
                         </td>
                         <td className="td-r text-gray-700 dark:text-gray-300">
-                          {a.paAmount > 0 ? (
-                            fmt(a.paAmount)
-                          ) : (
-                            <span className="muted">—</span>
-                          )}
+                          {(() => {
+                            const paCovers = (a.coverEntries || []).filter(
+                              isPaCover,
+                            );
+                            const total =
+                              (Number(a.paAmount) || 0) +
+                              paCovers.reduce(
+                                (s, c) => s + (Number(c.amount) || 0),
+                                0,
+                              );
+                            if (total <= 0)
+                              return <span className="muted">—</span>;
+                            return (
+                              <div>
+                                <div className="font-medium">{fmt(total)}</div>
+                                {paCovers.map((c, i) => (
+                                  <div
+                                    key={i}
+                                    className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap"
+                                  >
+                                    cover:{" "}
+                                    {c.staffName || getStaffName(c.staffId)}{" "}
+                                    {c.days}d
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="td-r font-semibold text-green-700 dark:text-green-400">
                           {fmt(getAllocTotalCost(a))}
@@ -729,7 +997,7 @@ export default function Allocations() {
               label="Total days invoiced"
               hint="Must match the invoice for this route"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <input
                   className="input w-32"
                   type="number"
@@ -890,218 +1158,8 @@ export default function Allocations() {
             </div>
 
             {/* Cover drivers — multiple */}
-            <div className="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="label">
-                  Cover drivers{" "}
-                  <span className="text-gray-400 dark:text-gray-500 normal-case font-normal">
-                    (optional)
-                  </span>
-                </p>
-                <button
-                  type="button"
-                  className="btn-ghost text-xs"
-                  onClick={() =>
-                    setForm((p) => ({
-                      ...p,
-                      coverEntries: [
-                        ...(p.coverEntries || []),
-                        {
-                          id: uid(),
-                          staffId: "",
-                          staffName: "",
-                          days: "",
-                          rate: p.regularRate || "",
-                          amount: 0,
-                          isExternal: false,
-                        },
-                      ],
-                    }))
-                  }
-                >
-                  + Add cover driver
-                </button>
-              </div>
-              {(form.coverEntries || []).length === 0 && (
-                <p className="text-xs text-gray-400 dark:text-gray-500">
-                  No cover drivers — click "+ Add cover driver" to add one.
-                </p>
-              )}
-              {(form.coverEntries || []).some(
-                (c) =>
-                  Number(c.rate) > 0 &&
-                  Number(c.rate) === Number(form.regularRate),
-              ) && (
-                <div className="alert-warn text-xs text-amber-700 dark:text-amber-400">
-                  ⚠ Cover rate matches regular rate — adjust if this driver is
-                  paid differently.
-                </div>
-              )}
-              {(form.coverEntries || []).map((c, i) => (
-                <div
-                  key={c.id}
-                  className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg space-y-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
-                      Cover driver {i + 1}
-                    </p>
-                    <button
-                      type="button"
-                      className="text-xs text-red-500 hover:text-red-700"
-                      onClick={() =>
-                        setForm((p) => ({
-                          ...p,
-                          coverEntries: p.coverEntries.filter(
-                            (_, j) => j !== i,
-                          ),
-                        }))
-                      }
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  <FormField label="Staff member">
-                    {c.isExternal ? (
-                      <input
-                        className="input text-sm"
-                        value={c.staffName}
-                        onChange={(e) =>
-                          setForm((p) => ({
-                            ...p,
-                            coverEntries: p.coverEntries.map((x, j) =>
-                              j === i ? { ...x, staffName: e.target.value } : x,
-                            ),
-                          }))
-                        }
-                        placeholder="External driver name…"
-                      />
-                    ) : (
-                      <select
-                        className="input text-sm"
-                        value={c.staffId}
-                        onChange={(e) => {
-                          const s = staff.find((x) => x.id === e.target.value);
-                          setForm((p) => ({
-                            ...p,
-                            coverEntries: p.coverEntries.map((x, j) =>
-                              j === i
-                                ? {
-                                    ...x,
-                                    staffId: e.target.value,
-                                    staffName: s?.name || "",
-                                  }
-                                : x,
-                            ),
-                          }));
-                        }}
-                      >
-                        <option value="">Select staff…</option>
-                        {staff.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    <label className="flex items-center gap-1.5 mt-1 text-xs text-gray-400 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={c.isExternal || false}
-                        onChange={(e) =>
-                          setForm((p) => ({
-                            ...p,
-                            coverEntries: p.coverEntries.map((x, j) =>
-                              j === i
-                                ? {
-                                    ...x,
-                                    isExternal: e.target.checked,
-                                    staffId: "",
-                                    staffName: "",
-                                  }
-                                : x,
-                            ),
-                          }))
-                        }
-                        className="w-3 h-3 rounded"
-                      />
-                      External / temp (not in staff list)
-                    </label>
-                  </FormField>
-                  <FormGrid cols={2}>
-                    <FormField label="Days covered">
-                      <input
-                        className="input text-sm"
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={c.days}
-                        onChange={(e) => {
-                          const days = e.target.value;
-                          const amount =
-                            Math.round(
-                              (Number(days) || 0) * (Number(c.rate) || 0) * 100,
-                            ) / 100;
-                          setForm((p) => ({
-                            ...p,
-                            coverEntries: p.coverEntries.map((x, j) =>
-                              j === i ? { ...x, days, amount } : x,
-                            ),
-                          }));
-                        }}
-                        placeholder="0"
-                      />
-                    </FormField>
-                    <FormField
-                      label="Rate (£/day)"
-                      hint="Adjust if different from regular"
-                    >
-                      <input
-                        className="input text-sm"
-                        type="number"
-                        step="0.01"
-                        value={c.rate}
-                        onChange={(e) => {
-                          const rate = e.target.value;
-                          const amount =
-                            Math.round(
-                              (Number(c.days) || 0) * (Number(rate) || 0) * 100,
-                            ) / 100;
-                          setForm((p) => ({
-                            ...p,
-                            coverEntries: p.coverEntries.map((x, j) =>
-                              j === i ? { ...x, rate, amount } : x,
-                            ),
-                          }));
-                        }}
-                        placeholder="90.00"
-                      />
-                    </FormField>
-                  </FormGrid>
-                  {c.days && c.rate && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Owed:{" "}
-                      <span className="font-semibold text-gray-900 dark:text-gray-100">
-                        {fmt(Number(c.days) * Number(c.rate))}
-                      </span>
-                    </p>
-                  )}
-                </div>
-              ))}
-              {(form.coverEntries || []).length > 0 && (
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Total cover owed:{" "}
-                  <span className="font-semibold text-gray-900 dark:text-gray-100">
-                    {fmt(
-                      (form.coverEntries || []).reduce(
-                        (s, c) =>
-                          s + (Number(c.days) || 0) * (Number(c.rate) || 0),
-                        0,
-                      ),
-                    )}
-                  </span>
-                </p>
-              )}
+            <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
+              {renderCoverList("driver")}
             </div>
 
             {/* Additive band pay */}
@@ -1300,30 +1358,47 @@ export default function Allocations() {
                       </span>
                     </p>
                   )}
+                  {renderCoverList("pa")}
                 </div>
               );
             })()}
 
-            {/* Days validation */}
+            {/* Days validation — drivers and PA checked separately */}
             {form.totalDays &&
               Number(form.regularDays) > 0 &&
               (() => {
-                const coverTotal = (form.coverEntries || []).reduce(
-                  (s, c) => s + (Number(c.days) || 0),
-                  0,
-                );
-                const split = Number(form.regularDays) + coverTotal;
                 const total = Number(form.totalDays);
-                if (split !== total)
+                const driverSplit =
+                  Number(form.regularDays) + sumDays(form.coverEntries);
+                // A route with a PA needs a PA every day it runs
+                const hasPA = !!(
+                  form.paStaffId ||
+                  (form.paCoverEntries || []).length ||
+                  getRoute(form.routeId)?.primaryPAId
+                );
+                const paSplit =
+                  (Number(form.paDays) || 0) + sumDays(form.paCoverEntries);
+                const problems = [];
+                if (driverSplit !== total)
+                  problems.push(
+                    `Driver days (${driverSplit}) don't match total (${total}). Regular + cover drivers should equal the total days invoiced.`,
+                  );
+                if (hasPA && paSplit !== total)
+                  problems.push(
+                    `PA days (${paSplit}) don't match total (${total}). This route needs a PA every day — add a cover PA or adjust the days.`,
+                  );
+                if (problems.length)
                   return (
-                    <div className="alert-warn text-sm text-amber-700 dark:text-amber-400">
-                      ⚠ Days split ({split}) doesn't match total ({total}).
-                      Regular + all cover days should equal total days invoiced.
+                    <div className="alert-warn text-sm text-amber-700 dark:text-amber-400 space-y-1">
+                      {problems.map((t, i) => (
+                        <p key={i}>⚠ {t}</p>
+                      ))}
                     </div>
                   );
                 return (
                   <div className="alert-success text-sm text-green-700 dark:text-green-400">
-                    ✓ Days add up correctly ({split} of {total})
+                    ✓ Days add up correctly — drivers {driverSplit} of {total}
+                    {hasPA ? `, PA ${paSplit} of ${total}` : ""}
                   </div>
                 );
               })()}

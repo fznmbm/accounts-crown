@@ -110,7 +110,7 @@ function collectEarnings(allocations, staffById, include = () => true) {
           name: c.staffName,
           category: onStaffList ? "cover" : "external",
           routeLabel,
-          role: "Cover",
+          role: c.role === "pa" ? "Cover PA" : "Cover",
           days: c.days,
           amount: c.amount,
           month,
