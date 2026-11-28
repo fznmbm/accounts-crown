@@ -147,6 +147,8 @@ export default function Compliance() {
     ? selectedStaffId
     : displayStaff[0]?.id || null;
   const selectedStaff = staff.find((s) => s.id === effectiveSelected);
+  // Phones/tablets: someone picked → show their records full screen
+  const mobileDetail = !!displayStaff.find((s) => s.id === selectedStaffId);
 
   // ── Compliance status dots ────────────────────────────────────────────────
   const licStatusMap = useMemo(() => {
@@ -335,7 +337,7 @@ export default function Compliance() {
             : "All records valid"
         }
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setTab("licences")}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === "licences" ? "bg-blue-600 text-white" : "btn-secondary"}`}
@@ -360,7 +362,7 @@ export default function Compliance() {
 
       {/* ══ SUMMARY TAB ══════════════════════════════════════════════════════ */}
       {tab === "summary" && (
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
           {/* Licences summary */}
           <div className="card overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
@@ -563,7 +565,9 @@ export default function Compliance() {
         className={`flex flex-1 overflow-hidden ${tab === "summary" ? "hidden" : ""}`}
       >
         {/* ── Left: staff list ─────────────────────────────────────── */}
-        <div className="w-48 md:w-64 flex-shrink-0 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-y-auto">
+        <div
+          className={`${mobileDetail ? "hidden lg:block" : "block"} w-full lg:w-64 flex-shrink-0 lg:border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-y-auto`}
+        >
           <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
             <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">
               {tab === "licences"
@@ -613,7 +617,19 @@ export default function Compliance() {
         </div>
 
         {/* ── Right: detail ────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto">
+        <div
+          className={`${mobileDetail ? "block" : "hidden lg:block"} flex-1 min-w-0 overflow-y-auto`}
+        >
+          {/* Back to the list — phones/tablets */}
+          <div className="lg:hidden px-4 pt-3">
+            <button
+              type="button"
+              className="btn-ghost -ml-2 text-sm"
+              onClick={() => setSelectedStaffId(null)}
+            >
+              ← All staff
+            </button>
+          </div>
           {!effectiveSelected ? (
             <EmptyState
               icon="👈"
@@ -622,8 +638,8 @@ export default function Compliance() {
             />
           ) : tab === "licences" ? (
             /* ══ LICENCES TAB ══════════════════════════════════════════ */
-            <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between">
+            <div className="p-4 sm:p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                     {selectedStaff?.name}
@@ -652,7 +668,7 @@ export default function Compliance() {
               ) : (
                 <div className="space-y-4">
                   {selectedLicences.map((l) => (
-                    <div key={l.id} className="card p-5 space-y-4">
+                    <div key={l.id} className="card p-4 sm:p-5 space-y-4">
                       <div className="flex items-center justify-between">
                         <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
                           {l.authority}
@@ -699,7 +715,7 @@ export default function Compliance() {
                         <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">
                           🚗 Vehicle
                         </p>
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                           <div>
                             <p className="text-xs text-gray-500 dark:text-gray-400">
                               Make & Model
@@ -802,7 +818,7 @@ export default function Compliance() {
                 <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
                   Mandatory training status
                 </p>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {mandatoryTrainingNames.map((type) => {
                     const rec = selectedTraining.find(
                       (t) => t.trainingType === type,
