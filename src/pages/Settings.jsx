@@ -133,6 +133,13 @@ export default function Settings() {
     holidays,
     billingRecipients,
     setBillingRecipients,
+    poHistory,
+    pupils,
+    staffLicences,
+    staffTraining,
+    submissions,
+    applications,
+    staffCharges,
   } = useApp();
   const [form, setForm] = useState({ ...DEFAULT_SETTINGS, ...settings });
   const [saved, setSaved] = useState(false);
@@ -440,7 +447,7 @@ export default function Settings() {
             <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
               Company logo
             </h2>
-            <div className="flex items-center gap-5">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
               {/* Preview */}
               <div className="flex-shrink-0">
                 {form.logoUrl ? (
@@ -473,7 +480,7 @@ export default function Settings() {
                   </div>
                 )}
               </div>
-              <div className="flex-1 space-y-3">
+              <div className="w-full sm:w-auto sm:flex-1 min-w-0 space-y-3">
                 <DocumentUploader
                   documents={
                     form.logoUrl ? [{ url: form.logoUrl, name: "Logo" }] : []
@@ -1035,22 +1042,34 @@ export default function Settings() {
                 Export backup
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                Download all your Supabase data as a JSON backup file.
+                Download all your data as a JSON backup file. Staff portal links
+                are left out on purpose — anyone holding one can open that
+                person's portal.
               </p>
               <button
                 className="btn-secondary text-sm"
                 onClick={() => {
+                  // Every table the app keeps, so a restore loses nothing
                   const data = {
                     exportedAt: new Date().toISOString(),
-                    routes,
-                    invoices,
-                    staff,
-                    payments,
-                    remittances,
+                    version: 2,
                     settings,
+                    billingRecipients,
+                    routes,
+                    poHistory,
+                    pupils,
+                    staff,
+                    staffLicences,
+                    staffTraining,
+                    applications,
                     attendance,
-                    allocations,
                     holidays,
+                    allocations,
+                    invoices,
+                    remittances,
+                    submissions,
+                    payments,
+                    staffCharges,
                   };
                   const blob = new Blob([JSON.stringify(data, null, 2)], {
                     type: "application/json",

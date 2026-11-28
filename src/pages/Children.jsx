@@ -249,7 +249,7 @@ export default function Children() {
         title={`Route ${route.number} — Children`}
         subtitle={`${route.name} · ${routePupils.length} child${routePupils.length !== 1 ? "ren" : ""}`}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               className="btn-secondary"
               onClick={() => navigate("/routes")}
@@ -278,10 +278,10 @@ export default function Children() {
         ) : (
           <div className="space-y-4">
             {routePupils.map((p) => (
-              <div key={p.id} className="card p-5">
+              <div key={p.id} className="card p-4 sm:p-5">
                 {/* Header */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-start justify-between gap-2 mb-4">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div className="w-11 h-11 avatar text-base flex-shrink-0">
                       {p.firstName[0]}
                       {p.lastName[0]}
@@ -315,7 +315,7 @@ export default function Children() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-shrink-0">
                     <button className="btn-ghost" onClick={() => openEdit(p)}>
                       Edit
                     </button>
@@ -329,7 +329,7 @@ export default function Children() {
                 </div>
 
                 {/* Info grid */}
-                <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                   {/* School */}
                   <div>
                     <p className="label mb-1">School</p>
@@ -434,7 +434,7 @@ export default function Children() {
                 {p.parentContacts?.filter((c) => c.name).length > 0 && (
                   <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                     <p className="label mb-2">Parent / guardian contacts</p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {p.parentContacts
                         .filter((c) => c.name)
                         .map((c, i) => (
@@ -447,10 +447,14 @@ export default function Children() {
                                 </span>
                               )}
                             </p>
+                            {/* Tap to call on phones */}
                             {c.phone && (
-                              <p className="text-gray-500 dark:text-gray-400">
+                              <a
+                                href={`tel:${c.phone.replace(/\s+/g, "")}`}
+                                className="block py-0.5 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
+                              >
                                 📞 {c.phone}
-                              </p>
+                              </a>
                             )}
                             {c.email && (
                               <p className="text-gray-500 dark:text-gray-400">
@@ -809,7 +813,7 @@ export default function Children() {
                     {form.afterschoolClubs.map((c) => (
                       <div
                         key={c.id}
-                        className="flex items-end gap-2 p-3 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-100 dark:border-amber-800/30"
+                        className="flex flex-wrap items-end gap-2 p-3 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-100 dark:border-amber-800/30"
                       >
                         <FormField label="Day">
                           <select
@@ -836,7 +840,7 @@ export default function Children() {
                             }
                           />
                         </FormField>
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-[10rem]">
                           <FormField label="Club name / notes">
                             <input
                               className="input"

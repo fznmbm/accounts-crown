@@ -123,6 +123,22 @@ export default function Layout() {
 
   // Close the mobile menu on every page change and with the Escape key
   useEffect(() => setNavOpen(false), [location.pathname]);
+
+  // The app frame is exactly one screen high and each page scrolls inside
+  // it, so the page itself must never scroll (Firefox otherwise lets you
+  // scroll into empty space past the end of long pages). Public pages like
+  // the staff portal are outside this frame and keep normal scrolling.
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prev = [html.style.overflow, body.style.overflow];
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prev[0];
+      body.style.overflow = prev[1];
+    };
+  }, []);
   useEffect(() => {
     if (!navOpen) return;
     const onKey = (e) => e.key === "Escape" && setNavOpen(false);
