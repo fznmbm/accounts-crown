@@ -280,9 +280,9 @@ export default function HolidayCalendar() {
         title="School Holiday Calendar"
         subtitle="Mark non-working days — used by attendance register and invoice validation"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <select
-              className="input w-36"
+              className="input flex-1 sm:flex-none sm:w-36"
               value={month}
               onChange={(e) => {
                 const v = Number(e.target.value);
@@ -326,9 +326,9 @@ export default function HolidayCalendar() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* ── Calendar grid ── */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
           {/* Summary strip */}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="metric">
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
                 Working days
@@ -376,7 +376,7 @@ export default function HolidayCalendar() {
                 {MONTHS[month]} {year} — Working days
               </h3>
             </div>
-            <div className="p-4 grid grid-cols-5 gap-2">
+            <div className="p-2 sm:p-4 grid grid-cols-5 gap-1 sm:gap-2">
               {/* Day headers */}
               {["Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => (
                 <div
@@ -405,13 +405,15 @@ export default function HolidayCalendar() {
                     onClick={() =>
                       isHol ? openEdit(dayHols[0]) : openAdd(d.date)
                     }
-                    className={`relative p-2 rounded-xl border-2 text-center transition-all hover:opacity-80 ${
+                    className={`relative p-1 sm:p-2 min-w-0 rounded-lg sm:rounded-xl border-2 text-center transition-all hover:opacity-80 ${
                       isHol
                         ? TYPE_STYLE[type] || TYPE_STYLE.school_holiday
                         : "bg-gray-50 dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600"
                     }`}
                   >
-                    <div className="text-lg font-bold">{d.dayNum}</div>
+                    <div className="text-base sm:text-lg font-bold">
+                      {d.dayNum}
+                    </div>
                     <div className="text-[10px] font-medium truncate">
                       {isHol ? dayHols[0].label : DOW[d.dow]}
                     </div>
@@ -527,7 +529,8 @@ export default function HolidayCalendar() {
         </div>
 
         {/* ── Right panel: year overview ── */}
-        <div className="w-52 flex-shrink-0 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-y-auto">
+        {/* Year overview — desktop only (phones use the month picker) */}
+        <div className="hidden lg:block w-52 flex-shrink-0 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-y-auto">
           <div className="p-4">
             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
               {year} — monthly working days
