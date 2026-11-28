@@ -13,8 +13,10 @@ import {
   YEARS,
   currentYear,
   currentMonth,
+  isPaCover,
 } from "../lib/utils";
 import { categoryLabel } from "../components/DeductionsPanel";
+import { getExpectedSubmissions } from "../lib/monthStatus";
 
 const periodKey = (m, y) => Number(y) * 12 + Number(m);
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -34,6 +36,7 @@ export default function StaffLedger() {
     staff,
     payments,
     allocations,
+    submissions = [],
     staffCharges = [],
     settings = {},
   } = useApp();
@@ -99,7 +102,7 @@ export default function StaffLedger() {
           name: c.staffName,
           a,
           suffix: `cover_${i}`,
-          detail: `${c.days} days × ${fmt(c.rate)} (cover)`,
+          detail: `${c.days} days × ${fmt(c.rate)} (${isPaCover(c) ? "cover PA" : "cover"})`,
           amount: c.amount,
         });
       });
@@ -260,6 +263,43 @@ export default function StaffLedger() {
     .reduce((s, l) => s + l.amount, 0);
   const yearBalance = round2(yearEarned - yearPaid - yearDeducted);
   const upcoming = selected ? upcomingByPerson.get(selected) || [] : [];
+
+  // ── "No invoice" flags (same rules as the Not submitted tab) ──────────────
+  const lastM = currentMonth() === 0 ? 11 : currentMonth() - 1;
+  const lastY = currentMonth() === 0 ? currentYear() - 1 : currentYear();
+  const expectedFor = (m, y) =>
+    getExpectedSubmissions({
+      month: m,
+      year: y,
+      allocations,
+      staff,
+      submissions,
+      mustSubmitTypes: settings?.mustSubmitTypes,
+    });
+  const missingLastMonth = new Set(
+    expectedFor(lastM, lastY)
+      .people.filter((p) => p.needsChasing)
+      .map((p) => p.key),
+  );
+  // Work months (up to last month) where the selected person owed us an
+  // invoice and none was received
+  const missingMonths = new Set();
+  if (selected?.startsWith("staff:")) {
+    const months = new Set(
+      (linesByPerson.get(selected) || [])
+        .filter(
+          (l) =>
+            l.type === "earning" &&
+            periodKey(l.month, l.year) <= periodKey(lastM, lastY),
+        )
+        .map((l) => `${l.year}-${l.month}`),
+    );
+    months.forEach((k) => {
+      const [y, m] = k.split("-").map(Number);
+      const p = expectedFor(m, y).people.find((x) => x.key === selected);
+      if (p?.needsChasing) missingMonths.add(k);
+    });
+  }
 
   // ── Printable statement for the selected person and period ────────────────
   const printStatement = () => {
@@ -424,7 +464,11 @@ ${upcomingHtml}
 
       <div className="flex flex-1 overflow-hidden">
         {/* ── Left: staff list ─────────────────────────────────────────── */}
-        <div className="w-48 md:w-72 flex-shrink-0 border-r border-gray-200 dark:border-gray-800 overflow-y-auto bg-white dark:bg-gray-900">
+        {/* Phones/tablets: the list fills the screen; picking someone opens
+            their ledger full screen with a Back button */}
+        <div
+          className={`${selected ? "hidden lg:block" : "block"} w-full lg:w-72 flex-shrink-0 lg:border-r border-gray-200 dark:border-gray-800 overflow-y-auto bg-white dark:bg-gray-900`}
+        >
           {summaries.length === 0 ? (
             <div className="p-6 text-sm text-gray-400 dark:text-gray-500 text-center">
               No staff added yet
@@ -455,6 +499,11 @@ ${upcomingHtml}
                             ? "External temp"
                             : s.type?.replace("_", " ")}
                         </p>
+                        {missingLastMonth.has(s.key) && (
+                          <p className="text-xs font-medium text-red-600 dark:text-red-400">
+                            ⚠ No invoice for {MONTHS_SHORT[lastM]}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="flex-shrink-0">
@@ -479,7 +528,9 @@ ${upcomingHtml}
         </div>
 
         {/* ── Right: ledger detail ──────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto">
+        <div
+          className={`${selected ? "block" : "hidden lg:block"} flex-1 min-w-0 overflow-y-auto`}
+        >
           {!selected ? (
             <EmptyState
               icon="👈"
@@ -487,9 +538,23 @@ ${upcomingHtml}
               description="Choose a staff member from the list to view their full ledger."
             />
           ) : (
-            <div className="p-6 space-y-5">
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+              {/* Back to the list — phones/tablets */}
+              <div className="lg:hidden flex items-center gap-2 -mt-1">
+                <button
+                  type="button"
+                  className="btn-ghost -ml-2 text-sm"
+                  onClick={() => setSelected(null)}
+                >
+                  ← All staff
+                </button>
+                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                  {selectedSummary?.name}
+                </span>
+              </div>
+
               {/* Summary cards */}
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="metric">
                   <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
                     Total earned
@@ -555,7 +620,7 @@ ${upcomingHtml}
               </div>
 
               {/* Year filter */}
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                   Transaction history
                 </p>
@@ -588,7 +653,7 @@ ${upcomingHtml}
 
               {/* Year summary */}
               {yearF !== "all" && (
-                <div className="flex items-center gap-6 px-4 py-3 bg-gray-50 dark:bg-gray-800/60 rounded-xl text-sm">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-3 bg-gray-50 dark:bg-gray-800/60 rounded-xl text-sm">
                   <span className="text-gray-500 dark:text-gray-400">
                     {yearF} earned:{" "}
                     <span className="font-semibold text-gray-900 dark:text-gray-100">
@@ -670,6 +735,14 @@ ${upcomingHtml}
                               <span className="text-sm text-gray-900 dark:text-gray-100">
                                 {line.label}
                               </span>
+                              {line.type === "earning" &&
+                                missingMonths.has(
+                                  `${line.year}-${line.month}`,
+                                ) && (
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 whitespace-nowrap">
+                                    No invoice
+                                  </span>
+                                )}
                             </div>
                           </td>
                           <td className="td text-xs text-gray-500 dark:text-gray-400">
