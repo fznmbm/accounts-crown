@@ -377,7 +377,7 @@ export default function Settings() {
         title="Settings"
         subtitle="Company details, tax and bank information"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {saved && (
               <span className="text-sm text-green-600 dark:text-green-400 font-medium">
                 ✓ Saved
@@ -393,8 +393,8 @@ export default function Settings() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-6 pb-6">
-        <div className="max-w-3xl mx-auto space-y-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-6">
+        <div className="max-w-3xl mx-auto space-y-4 sm:space-y-6">
           {/* Company info */}
           <div className="card p-5 space-y-4">
             <h2 className="section-title pb-2 border-b border-gray-100 dark:border-gray-700">
@@ -790,8 +790,8 @@ export default function Settings() {
                 </div>
               ))}
             </div>
-            <div className="flex gap-2 items-end">
-              <div className="flex-1">
+            <div className="flex flex-wrap gap-2 items-end">
+              <div className="w-full sm:w-auto sm:flex-1">
                 <p className="label mb-1">Training name</p>
                 <input
                   className="input"
@@ -800,7 +800,7 @@ export default function Settings() {
                   placeholder="e.g. First Aid"
                 />
               </div>
-              <div className="w-28">
+              <div className="flex-1 sm:flex-none sm:w-28">
                 <p className="label mb-1">Renewal (years)</p>
                 <input
                   className="input"
