@@ -200,9 +200,18 @@ export default function DeductionsPanel() {
         label: `Deduction for ${nameOf(c)} ${status === "waived" ? "waived" : "restored"}`,
       },
     );
+    // The item leaves the current filter, so offer a way to jump to it
     if (ok)
       toast.success(
         status === "waived" ? "Deduction waived." : "Deduction restored.",
+        statusF !== status && statusF !== "all"
+          ? {
+              action: {
+                label: status === "waived" ? "Show waived" : "Show to deduct",
+                onClick: () => setStatusF(status),
+              },
+            }
+          : undefined,
       );
   };
 

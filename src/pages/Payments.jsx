@@ -353,6 +353,38 @@ export default function Payments() {
     }
   };
   const getName = (id) => staff.find((s) => s.id === id)?.name || "Unknown";
+  const payeeName = (p) => (p.isExternal ? p.externalName : getName(p.staffId));
+
+  // Routes settled, deductions taken off, link to the original submission —
+  // shared by the table and the phone cards
+  const renderPaymentNotes = (p) => {
+    const ded = staffCharges.filter((c) => c.paymentId === p.id);
+    const sub = submissions?.find((s) => s.paymentId === p.id);
+    return (
+      <>
+        {p.allocationIds?.length > 0 && (
+          <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+            Settles {p.allocationIds.length} route
+            {p.allocationIds.length > 1 ? "s" : ""}
+          </p>
+        )}
+        {ded.length > 0 && (
+          <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+            After {fmt(ded.reduce((s, c) => s + c.amount, 0))} deduction
+            {ded.length > 1 ? "s" : ""}
+          </p>
+        )}
+        {sub && (
+          <a
+            href="/invoice-submissions"
+            className="text-xs text-purple-600 dark:text-purple-400 hover:underline mt-0.5 block"
+          >
+            📄 View original submission
+          </a>
+        )}
+      </>
+    );
+  };
 
   const filtered = payments
     .filter((p) => {
@@ -389,7 +421,7 @@ export default function Payments() {
       />
 
       {/* Tabs */}
-      <div className="flex gap-1 px-6 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
+      <div className="flex gap-1 px-4 sm:px-6 border-b border-gray-200 dark:border-gray-800 flex-shrink-0 overflow-x-auto">
         {TABS.map((t) => {
           const count =
             t.key === "deductions"
@@ -399,7 +431,7 @@ export default function Payments() {
             <button
               key={t.key}
               onClick={() => switchTab(t.key)}
-              className={`px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors ${
+              className={`px-4 py-2.5 whitespace-nowrap text-sm border-b-2 -mb-px transition-colors ${
                 tab === t.key
                   ? "border-blue-600 text-blue-700 dark:text-blue-400 font-medium"
                   : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
@@ -431,7 +463,7 @@ export default function Payments() {
         <>
           <div className="toolbar">
             <select
-              className="input w-44"
+              className="input w-full sm:w-44"
               value={staffF}
               onChange={(e) => setStaffF(e.target.value)}
             >
@@ -444,7 +476,7 @@ export default function Payments() {
               ))}
             </select>
             <select
-              className="input w-36"
+              className="input flex-1 sm:flex-none sm:w-36"
               value={monthF}
               onChange={(e) => setMonthF(e.target.value)}
             >
@@ -471,7 +503,7 @@ export default function Payments() {
               ))}
             </select>
             {filtered.length > 0 && (
-              <div className="ml-auto flex items-center gap-4 text-sm">
+              <div className="w-full sm:w-auto sm:ml-auto flex items-center justify-between sm:justify-start gap-4 text-sm">
                 <span className="text-gray-500 dark:text-gray-400">
                   {filtered.length} payment{filtered.length !== 1 ? "s" : ""}
                 </span>
@@ -511,118 +543,145 @@ export default function Payments() {
                 }
               />
             ) : (
-              <div className="card overflow-hidden">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="thead-row">
-                      <th className="th">Staff member</th>
-                      <th className="th">Date paid</th>
-                      <th className="th">For period</th>
-                      <th className="th">Type</th>
-                      <th className="th">Reference</th>
-                      <th className="th-r">Amount</th>
-                      <th className="th"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {filtered.map((p) => (
-                      <tr key={p.id} className="tr">
-                        <td className="td">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 avatar text-xs">
-                              {p.isExternal
-                                ? p.externalName?.[0] || "E"
-                                : getName(p.staffId)[0]}
-                            </div>
-                            <div>
-                              <span className="font-medium text-gray-900 dark:text-gray-100">
-                                {p.isExternal
-                                  ? p.externalName
-                                  : getName(p.staffId)}
-                              </span>
+              <>
+                {/* Phones: one card per payment */}
+                <div className="md:hidden space-y-2">
+                  {filtered.map((p) => (
+                    <div key={p.id} className="card p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 avatar text-xs flex-shrink-0">
+                            {(payeeName(p) || "E")[0]}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                              {payeeName(p)}
                               {p.isExternal && (
                                 <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">
                                   External
                                 </span>
                               )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="td text-gray-600 dark:text-gray-400">
-                          {fmtD(p.date)}
-                        </td>
-                        <td className="td text-gray-600 dark:text-gray-400">
-                          {MONTHS_SHORT[p.month]} {p.year}
-                        </td>
-                        <td className="td">
-                          <Badge
-                            type={p.type === "partial" ? "partial_pay" : p.type}
-                            label={p.type}
-                          />
-                        </td>
-                        <td className="td">
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {p.reference || "—"}
-                          </p>
-                          {p.allocationIds?.length > 0 && (
-                            <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
-                              Settles {p.allocationIds.length} route
-                              {p.allocationIds.length > 1 ? "s" : ""}
                             </p>
-                          )}
-                          {(() => {
-                            const ded = staffCharges.filter(
-                              (c) => c.paymentId === p.id,
-                            );
-                            if (!ded.length) return null;
-                            return (
-                              <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-                                After{" "}
-                                {fmt(ded.reduce((s, c) => s + c.amount, 0))}{" "}
-                                deduction
-                                {ded.length > 1 ? "s" : ""}
-                              </p>
-                            );
-                          })()}
-                          {(() => {
-                            const sub = submissions?.find(
-                              (s) => s.paymentId === p.id,
-                            );
-                            if (!sub) return null;
-                            return (
-                              <a
-                                href="/invoice-submissions"
-                                className="text-xs text-purple-600 dark:text-purple-400 hover:underline mt-0.5 block"
-                              >
-                                📄 View original submission
-                              </a>
-                            );
-                          })()}
-                        </td>
-                        <td className="td-r font-semibold text-gray-900 dark:text-gray-100">
-                          {fmt(p.amount)}
-                        </td>
-                        <td className="td">
-                          <div className="flex gap-1">
-                            <button
-                              className="btn-ghost"
-                              onClick={() => edit(p)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                              onClick={() => del(p.id)}
-                            >
-                              Del
-                            </button>
+                            <p className="muted">
+                              Paid {fmtD(p.date)} · for {MONTHS_SHORT[p.month]}{" "}
+                              {p.year}
+                            </p>
                           </div>
-                        </td>
+                        </div>
+                        <p className="text-base font-semibold text-gray-900 dark:text-gray-100 flex-shrink-0">
+                          {fmt(p.amount)}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        <Badge
+                          type={p.type === "partial" ? "partial_pay" : p.type}
+                          label={p.type}
+                        />
+                        {p.reference && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {p.reference}
+                          </span>
+                        )}
+                      </div>
+                      {renderPaymentNotes(p)}
+                      <div className="flex gap-1 mt-2 -ml-2">
+                        <button className="btn-ghost" onClick={() => edit(p)}>
+                          Edit
+                        </button>
+                        <button
+                          className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          onClick={() => del(p.id)}
+                        >
+                          Del
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Tablets and desktop: table */}
+                <div className="hidden md:block card overflow-hidden">
+                  <table className="min-w-full">
+                    <thead>
+                      <tr className="thead-row">
+                        <th className="th">Staff member</th>
+                        <th className="th">Date paid</th>
+                        <th className="th">For period</th>
+                        <th className="th">Type</th>
+                        <th className="th">Reference</th>
+                        <th className="th-r">Amount</th>
+                        <th className="th"></th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {filtered.map((p) => (
+                        <tr key={p.id} className="tr">
+                          <td className="td">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-7 h-7 avatar text-xs">
+                                {p.isExternal
+                                  ? p.externalName?.[0] || "E"
+                                  : getName(p.staffId)[0]}
+                              </div>
+                              <div>
+                                <span className="font-medium text-gray-900 dark:text-gray-100">
+                                  {p.isExternal
+                                    ? p.externalName
+                                    : getName(p.staffId)}
+                                </span>
+                                {p.isExternal && (
+                                  <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">
+                                    External
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="td text-gray-600 dark:text-gray-400">
+                            {fmtD(p.date)}
+                          </td>
+                          <td className="td text-gray-600 dark:text-gray-400">
+                            {MONTHS_SHORT[p.month]} {p.year}
+                          </td>
+                          <td className="td">
+                            <Badge
+                              type={
+                                p.type === "partial" ? "partial_pay" : p.type
+                              }
+                              label={p.type}
+                            />
+                          </td>
+                          <td className="td">
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {p.reference || "—"}
+                            </p>
+                            {renderPaymentNotes(p)}
+                          </td>
+                          <td className="td-r font-semibold text-gray-900 dark:text-gray-100">
+                            {fmt(p.amount)}
+                          </td>
+                          <td className="td">
+                            <div className="flex gap-1">
+                              <button
+                                className="btn-ghost"
+                                onClick={() => edit(p)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                onClick={() => del(p.id)}
+                              >
+                                Del
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </>
@@ -919,7 +978,7 @@ export default function Payments() {
                   )}
 
                   <div
-                    className={`flex items-center justify-between gap-3 text-sm ${hasDue ? "pt-1 border-t border-amber-200 dark:border-amber-800" : ""}`}
+                    className={`flex flex-wrap items-center justify-between gap-3 text-sm ${hasDue ? "pt-1 border-t border-amber-200 dark:border-amber-800" : ""}`}
                   >
                     <span className="text-gray-700 dark:text-gray-300">
                       Owed for {monthLabel}
