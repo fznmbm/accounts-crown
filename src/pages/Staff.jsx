@@ -208,7 +208,7 @@ export default function Staff() {
       />
       <div className="toolbar">
         <input
-          className="input w-52"
+          className="input flex-1 min-w-0 sm:flex-none sm:w-52"
           placeholder="Search staff…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -242,14 +242,14 @@ export default function Staff() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map((s) => (
-              <div key={s.id} className="card p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 avatar text-base">
+              <div key={s.id} className="card p-4 sm:p-5">
+                <div className="flex items-start justify-between gap-2 mb-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 avatar text-base flex-shrink-0">
                       {s.name[0].toUpperCase()}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                           {s.name}
                         </p>
@@ -285,7 +285,7 @@ export default function Staff() {
                       <Badge type={s.type} />
                     </div>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-shrink-0">
                     <button
                       className="btn-ghost text-xs"
                       onClick={() => edit(s)}
@@ -306,15 +306,22 @@ export default function Staff() {
                       🏷 {s.shortName}
                     </p>
                   )}
+                  {/* Tap to call / email on phones */}
                   {s.phone && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                    <a
+                      href={`tel:${s.phone.replace(/\s+/g, "")}`}
+                      className="block text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
+                    >
                       📞 {s.phone}
-                    </p>
+                    </a>
                   )}
                   {s.email && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                    <a
+                      href={`mailto:${s.email}`}
+                      className="block text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 break-all"
+                    >
                       ✉ {s.email}
-                    </p>
+                    </a>
                   )}
                   {s.address && (
                     <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -361,18 +368,15 @@ export default function Staff() {
                             Portal active
                           </span>
                         </div>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 -mr-2">
                           <button
-                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                            className="btn-ghost text-xs text-blue-600 dark:text-blue-400"
                             onClick={() => copyPortalLink(s)}
                           >
                             Copy link
                           </button>
-                          <span className="text-gray-300 dark:text-gray-600">
-                            ·
-                          </span>
                           <button
-                            className="text-xs text-red-500 dark:text-red-400 hover:underline"
+                            className="btn-ghost text-xs text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                             onClick={() => revokeToken(s.id)}
                           >
                             Revoke
@@ -381,7 +385,7 @@ export default function Staff() {
                       </div>
                     ) : (
                       <button
-                        className="w-full text-xs text-blue-600 dark:text-blue-400 hover:underline text-left"
+                        className="w-full py-2 text-xs text-blue-600 dark:text-blue-400 hover:underline text-left"
                         onClick={() => copyPortalLink(s)}
                       >
                         🔗 Generate &amp; copy portal link
