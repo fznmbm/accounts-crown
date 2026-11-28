@@ -12,6 +12,7 @@ import {
   YEARS,
   currentMonth,
   currentYear,
+  paDaysFromAttendance,
 } from "../lib/utils";
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri"];
@@ -1098,24 +1099,30 @@ export default function Attendance() {
       //   amount: 0,
       // }));
 
-      // PA cost from attendance
+      // PA cost from attendance — the route's PA is the regular; any other PA
+      // who did the run is a cover PA (kept in coverEntries, role "pa")
       const primaryPAId = route.primaryPAId;
       const primaryPA = primaryPAId
         ? staff.find((s) => s.id === primaryPAId)
         : null;
       const paPayRate = route.paPayRate || 0;
-      let paDays = 0;
-      if (primaryPAId) {
-        opRecords.forEach((a) => {
-          if (a.isSplitRun) {
-            if (a.amPaId === primaryPAId) paDays += 0.5;
-            if (a.pmPaId === primaryPAId) paDays += 0.5;
-          } else if (a.paId === primaryPAId) {
-            paDays += a.daysValue ?? 1;
-          }
-        });
-      }
+      const paSplit = primaryPAId ? paDaysFromAttendance(opRecords) : [];
+      const regularPA = paSplit.find((p) => p.staffId === primaryPAId);
+      const paDays = regularPA?.days || 0;
       const paAmount = Math.round(paDays * paPayRate * 100) / 100;
+      const paCoverEntries = paSplit
+        .filter((p) => p !== regularPA)
+        .map((p) => ({
+          id: uid(),
+          staffId: p.staffId || "",
+          staffName:
+            p.name || staff.find((s) => s.id === p.staffId)?.name || "",
+          days: p.days,
+          rate: paPayRate,
+          amount: Math.round(p.days * paPayRate * 100) / 100,
+          isExternal: p.isExternal,
+          role: "pa",
+        }));
 
       newAllocations.push({
         id: uid(),
@@ -1135,8 +1142,8 @@ export default function Attendance() {
         tempDays: firstCover?.days || 0,
         tempRate: firstCover?.rate || 0,
         tempAmount: firstCover?.amount || 0,
-        // New multiple cover entries
-        coverEntries,
+        // New multiple cover entries (cover drivers, then cover PAs)
+        coverEntries: [...coverEntries, ...paCoverEntries],
         absenceReason: "",
         notes: rateNote
           ? `Auto-generated from attendance register. ${rateNote}`
