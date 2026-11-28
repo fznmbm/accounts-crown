@@ -193,7 +193,7 @@ export default function Apply() {
   }
 
   const inputCls = (errKey) =>
-    `w-full px-3 py-2.5 rounded-lg bg-gray-800 border text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition ${
+    `w-full px-3 py-2.5 rounded-lg bg-gray-800 border text-white placeholder-gray-500 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition ${
       errors[errKey] ? "border-red-500" : "border-gray-600"
     }`;
 
@@ -223,7 +223,7 @@ export default function Apply() {
                     value={v}
                     checked={form.positionType === v}
                     onChange={f("positionType")}
-                    className="w-4 h-4 accent-blue-500"
+                    className="w-5 h-5 accent-blue-500"
                   />
                   <span className="text-sm text-gray-300 capitalize">
                     {v === "driver" ? "Driver" : "PA"}
@@ -240,6 +240,7 @@ export default function Apply() {
           <Field label="Full Name" required error={errors.fullName}>
             <input
               className={inputCls("fullName")}
+              autoComplete="name"
               value={form.fullName}
               onChange={f("fullName")}
               placeholder="As it appears on official documents"
@@ -249,6 +250,7 @@ export default function Apply() {
             <input
               className={inputCls("email")}
               type="email"
+              autoComplete="email"
               value={form.email}
               onChange={f("email")}
             />
@@ -257,6 +259,7 @@ export default function Apply() {
             <input
               className={inputCls("phone")}
               type="tel"
+              autoComplete="tel"
               value={form.phone}
               onChange={f("phone")}
             />
@@ -264,6 +267,7 @@ export default function Apply() {
           <Field label="Current Address" required error={errors.currentAddress}>
             <input
               className={inputCls("currentAddress")}
+              autoComplete="street-address"
               value={form.currentAddress}
               onChange={f("currentAddress")}
             />
@@ -286,6 +290,8 @@ export default function Apply() {
           >
             <input
               className={inputCls("niNumber")}
+              autoCapitalize="characters"
+              autoComplete="off"
               value={form.niNumber}
               onChange={f("niNumber")}
               placeholder="e.g. AB 12 34 56 C"
@@ -308,7 +314,7 @@ export default function Apply() {
               type="checkbox"
               checked={form.hasUkDrivingLicence}
               onChange={f("hasUkDrivingLicence")}
-              className="w-4 h-4 rounded accent-blue-500"
+              className="w-5 h-5 rounded accent-blue-500"
             />
             <span className="text-sm text-gray-300">
               Do you hold a full current UK driving license?
@@ -319,7 +325,7 @@ export default function Apply() {
               type="checkbox"
               checked={form.requiresWorkPermit}
               onChange={f("requiresWorkPermit")}
-              className="w-4 h-4 rounded accent-blue-500"
+              className="w-5 h-5 rounded accent-blue-500"
             />
             <span className="text-sm text-gray-300">
               Do you require a permit to work in the UK?
@@ -350,7 +356,7 @@ export default function Apply() {
               type="checkbox"
               checked={form.hasConvictions}
               onChange={f("hasConvictions")}
-              className="w-4 h-4 rounded accent-blue-500"
+              className="w-5 h-5 rounded accent-blue-500"
             />
             <span className="text-sm text-gray-300">
               Do you have any convictions?
@@ -381,7 +387,7 @@ export default function Apply() {
               type="checkbox"
               checked={form.dbsRegistered}
               onChange={f("dbsRegistered")}
-              className="w-4 h-4 rounded accent-blue-500"
+              className="w-5 h-5 rounded accent-blue-500"
             />
             <span className="text-sm text-gray-300">
               Are you registered with the DBS Update Service?
@@ -504,7 +510,7 @@ export default function Apply() {
               type="checkbox"
               checked={form.declarationAgreed}
               onChange={f("declarationAgreed")}
-              className="w-4 h-4 rounded accent-blue-500 mt-0.5 flex-shrink-0"
+              className="w-5 h-5 rounded accent-blue-500 mt-0.5 flex-shrink-0"
             />
             <span className="text-sm text-gray-300">
               I agree to the above declaration
