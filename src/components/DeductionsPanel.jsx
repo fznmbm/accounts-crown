@@ -254,11 +254,43 @@ export default function DeductionsPanel() {
     .filter((c) => c.status === "outstanding")
     .reduce((s, c) => s + c.amount, 0);
 
+  // Edit / Waive / Restore / Delete — shared by the table and phone cards
+  const renderActions = (c) => (
+    <>
+      {c.status === "outstanding" && (
+        <>
+          <button className="btn-ghost" onClick={() => edit(c)}>
+            Edit
+          </button>
+          <button className="btn-ghost" onClick={() => setStatus(c, "waived")}>
+            Waive
+          </button>
+        </>
+      )}
+      {c.status === "waived" && (
+        <button
+          className="btn-ghost"
+          onClick={() => setStatus(c, "outstanding")}
+        >
+          Restore
+        </button>
+      )}
+      {c.status !== "deducted" && (
+        <button
+          className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+          onClick={() => del(c)}
+        >
+          Del
+        </button>
+      )}
+    </>
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <select
-          className="input w-40"
+          className="input w-full sm:w-40"
           value={statusF}
           onChange={(e) => setStatusF(e.target.value)}
         >
@@ -268,7 +300,7 @@ export default function DeductionsPanel() {
           <option value="all">All</option>
         </select>
         <select
-          className="input w-44"
+          className="input w-full sm:w-44"
           value={staffF}
           onChange={(e) => setStaffF(e.target.value)}
         >
@@ -286,7 +318,10 @@ export default function DeductionsPanel() {
             {fmt(outstandingTotal)}
           </span>
         </span>
-        <button className="btn-primary ml-auto" onClick={open}>
+        <button
+          className="btn-primary w-full sm:w-auto sm:ml-auto"
+          onClick={open}
+        >
           + Add deduction
         </button>
       </div>
@@ -298,95 +333,118 @@ export default function DeductionsPanel() {
           description="Record training, badge renewals and other costs you paid for a driver or PA, so they come off their pay."
         />
       ) : (
-        <div className="card overflow-hidden">
-          <table className="min-w-full">
-            <thead>
-              <tr className="thead-row">
-                <th className="th">Staff member</th>
-                <th className="th">What for</th>
-                <th className="th">Charge date</th>
-                <th className="th">Comes off pay for</th>
-                <th className="th-r">Amount</th>
-                <th className="th">Status</th>
-                <th className="th"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {list.map((c) => (
-                <tr key={c.id} className="tr">
-                  <td className="td">
-                    <span className="font-medium text-gray-900 dark:text-gray-100">
+        <>
+          {/* Phones: one card per deduction */}
+          <div className="md:hidden space-y-2">
+            {list.map((c) => (
+              <div key={c.id} className="card p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900 dark:text-gray-100">
                       {nameOf(c)}
-                    </span>
-                    {c.isExternal && (
-                      <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">
-                        External
-                      </span>
-                    )}
-                  </td>
-                  <td className="td">
-                    <p className="text-sm text-gray-900 dark:text-gray-100">
-                      {categoryLabel(c.category)}
+                      {c.isExternal && (
+                        <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">
+                          External
+                        </span>
+                      )}
                     </p>
-                    {c.description && <p className="muted">{c.description}</p>}
-                  </td>
-                  <td className="td text-gray-600 dark:text-gray-400">
-                    {c.chargeDate ? fmtD(c.chargeDate) : "—"}
-                  </td>
-                  <td className="td text-gray-600 dark:text-gray-400">
-                    {MONTHS_SHORT[c.deductMonth]} {c.deductYear}
-                    {c.instalments > 1 && (
-                      <span className="muted ml-1">
-                        ({c.instalmentNo} of {c.instalments})
-                      </span>
-                    )}
-                  </td>
-                  <td className="td-r font-semibold text-gray-900 dark:text-gray-100">
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      {categoryLabel(c.category)}
+                      {c.description ? ` — ${c.description}` : ""}
+                    </p>
+                  </div>
+                  <p className="text-base font-semibold text-gray-900 dark:text-gray-100 flex-shrink-0">
                     {fmt(c.amount)}
-                  </td>
-                  <td className="td">
-                    <span className={STATUS_CHIP[c.status]?.cls || "chip-gray"}>
-                      {STATUS_CHIP[c.status]?.label || c.status}
-                    </span>
-                  </td>
-                  <td className="td">
-                    <div className="flex gap-1 justify-end">
-                      {c.status === "outstanding" && (
-                        <>
-                          <button className="btn-ghost" onClick={() => edit(c)}>
-                            Edit
-                          </button>
-                          <button
-                            className="btn-ghost"
-                            onClick={() => setStatus(c, "waived")}
-                          >
-                            Waive
-                          </button>
-                        </>
-                      )}
-                      {c.status === "waived" && (
-                        <button
-                          className="btn-ghost"
-                          onClick={() => setStatus(c, "outstanding")}
-                        >
-                          Restore
-                        </button>
-                      )}
-                      {c.status !== "deducted" && (
-                        <button
-                          className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                          onClick={() => del(c)}
-                        >
-                          Del
-                        </button>
-                      )}
-                    </div>
-                  </td>
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  <span className={STATUS_CHIP[c.status]?.cls || "chip-gray"}>
+                    {STATUS_CHIP[c.status]?.label || c.status}
+                  </span>
+                  <span>
+                    Off pay for {MONTHS_SHORT[c.deductMonth]} {c.deductYear}
+                    {c.instalments > 1
+                      ? ` (${c.instalmentNo} of ${c.instalments})`
+                      : ""}
+                  </span>
+                  {c.chargeDate && <span>Charged {fmtD(c.chargeDate)}</span>}
+                </div>
+                {c.status !== "deducted" && (
+                  <div className="flex flex-wrap gap-1 mt-2 -ml-2">
+                    {renderActions(c)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Tablets and desktop: table */}
+          <div className="hidden md:block card overflow-hidden">
+            <table className="min-w-full">
+              <thead>
+                <tr className="thead-row">
+                  <th className="th">Staff member</th>
+                  <th className="th">What for</th>
+                  <th className="th">Charge date</th>
+                  <th className="th">Comes off pay for</th>
+                  <th className="th-r">Amount</th>
+                  <th className="th">Status</th>
+                  <th className="th"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {list.map((c) => (
+                  <tr key={c.id} className="tr">
+                    <td className="td">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {nameOf(c)}
+                      </span>
+                      {c.isExternal && (
+                        <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">
+                          External
+                        </span>
+                      )}
+                    </td>
+                    <td className="td">
+                      <p className="text-sm text-gray-900 dark:text-gray-100">
+                        {categoryLabel(c.category)}
+                      </p>
+                      {c.description && (
+                        <p className="muted">{c.description}</p>
+                      )}
+                    </td>
+                    <td className="td text-gray-600 dark:text-gray-400">
+                      {c.chargeDate ? fmtD(c.chargeDate) : "—"}
+                    </td>
+                    <td className="td text-gray-600 dark:text-gray-400">
+                      {MONTHS_SHORT[c.deductMonth]} {c.deductYear}
+                      {c.instalments > 1 && (
+                        <span className="muted ml-1">
+                          ({c.instalmentNo} of {c.instalments})
+                        </span>
+                      )}
+                    </td>
+                    <td className="td-r font-semibold text-gray-900 dark:text-gray-100">
+                      {fmt(c.amount)}
+                    </td>
+                    <td className="td">
+                      <span
+                        className={STATUS_CHIP[c.status]?.cls || "chip-gray"}
+                      >
+                        {STATUS_CHIP[c.status]?.label || c.status}
+                      </span>
+                    </td>
+                    <td className="td">
+                      <div className="flex gap-1 justify-end">
+                        {renderActions(c)}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {showModal && (
