@@ -254,7 +254,7 @@ ${section(
         title="Staff Applications"
         subtitle="Review and process incoming applications"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {["pending", "approved", "rejected", "all"].map((s) => (
               <button
                 key={s}
@@ -275,7 +275,7 @@ ${section(
 
       <div className="flex flex-1 overflow-hidden">
         {/* ── List ── */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6">
           {filtered.length === 0 ? (
             <EmptyState
               icon="📋"
@@ -298,21 +298,21 @@ ${section(
                   onClick={() => setViewing(app)}
                   className={`card p-4 cursor-pointer hover:shadow-md transition-shadow ${viewing?.id === app.id ? "ring-2 ring-blue-500" : ""}`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
                       <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-sm font-bold text-blue-700 dark:text-blue-400 flex-shrink-0">
                         {app.fullName?.[0] || "?"}
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                           {app.fullName}
                         </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 break-all">
                           {app.email} · {app.phone}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 sm:flex-shrink-0 pl-12 sm:pl-0">
                       <span className="text-xs text-gray-400 dark:text-gray-500">
                         {new Date(app.createdAt).toLocaleDateString("en-GB")}
                       </span>
@@ -328,7 +328,7 @@ ${section(
                   </div>
 
                   {/* Quick flags */}
-                  <div className="flex gap-2 mt-2 ml-12 flex-wrap">
+                  <div className="flex gap-2 mt-2 ml-0 sm:ml-12 flex-wrap">
                     {app.hasUkDrivingLicence && (
                       <span className="text-xs text-green-600 dark:text-green-400">
                         ✓ UK Driving Licence
@@ -352,7 +352,7 @@ ${section(
                   </div>
 
                   <div
-                    className="flex gap-2 mt-3 ml-12"
+                    className="flex flex-wrap gap-2 mt-3 ml-0 sm:ml-12"
                     onClick={(e) => e.stopPropagation()}
                   >
                     {app.status === "pending" && (
@@ -389,9 +389,17 @@ ${section(
 
         {/* ── Detail panel ── */}
         {viewing && (
-          <div className="w-96 flex-shrink-0 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-y-auto">
-            <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+          // Phones/tablets: full screen over the list. Desktop: side panel.
+          <div className="fixed inset-0 z-40 lg:static lg:z-auto w-full lg:w-96 flex-shrink-0 lg:border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-y-auto overscroll-contain">
+            <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 p-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between gap-2">
+              <button
+                onClick={() => setViewing(null)}
+                className="lg:hidden btn-ghost -ml-2 text-sm"
+                aria-label="Back to list"
+              >
+                ← Back
+              </button>
+              <h3 className="min-w-0 flex-1 truncate font-semibold text-gray-900 dark:text-gray-100">
                 {viewing.fullName}
               </h3>
               <div className="flex items-center gap-2">
@@ -404,7 +412,8 @@ ${section(
                 </button>
                 <button
                   onClick={() => setViewing(null)}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg"
+                  className="hidden lg:inline text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg"
+                  aria-label="Close"
                 >
                   ×
                 </button>
