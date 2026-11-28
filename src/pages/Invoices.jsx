@@ -532,6 +532,74 @@ export default function Invoices() {
   const totalF = filtered.reduce((s, x) => s + (x.total || 0), 0);
   const paidF = filtered.reduce((s, x) => s + (x.paidAmount || 0), 0);
 
+  // Edit / Revise / Credit note / PDF / Delete — shared by table and phone cards
+  const renderActions = (inv) => (
+    <>
+      <button className="btn-ghost" onClick={() => openEdit(inv)}>
+        Edit
+      </button>
+      {!inv.isRevised &&
+        !inv.originalInvoiceId &&
+        inv.type !== "credit_note" && (
+          <button
+            className="btn-ghost text-amber-600 dark:text-amber-400"
+            onClick={() => openRevise(inv)}
+          >
+            Revise
+          </button>
+        )}
+      {inv.type !== "credit_note" && inv.status === "paid" && (
+        <button
+          className="btn-ghost text-purple-600 dark:text-purple-400"
+          onClick={() => openCreditNote(inv)}
+        >
+          CN
+        </button>
+      )}
+      {inv.type === "credit_note" && (
+        <button
+          className="btn-ghost text-purple-600 dark:text-purple-400"
+          onClick={() => {
+            const blob = generateCreditNotePDFBlob({
+              creditNote: inv,
+              settings,
+              recipient: null,
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `credit-note-${inv.invoiceNumber}.pdf`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+        >
+          ↓ PDF
+        </button>
+      )}
+      <button
+        className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+        onClick={() => del(inv.id)}
+      >
+        Del
+      </button>
+    </>
+  );
+
+  // Credit note / superseded / revised labels
+  const renderTags = (inv) => (
+    <>
+      {inv.type === "credit_note" && (
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
+          CREDIT NOTE
+        </span>
+      )}
+      {inv.isRevised && <span className="chip-red text-xs">superseded</span>}
+      {inv.originalInvoiceId && inv.type !== "credit_note" && (
+        <span className="chip-blue text-xs">revised</span>
+      )}
+    </>
+  );
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader
@@ -595,7 +663,7 @@ export default function Invoices() {
         {/* Preview table */}
         {preview && (
           <div className="card overflow-hidden border-blue-200 dark:border-blue-800">
-            <div className="flex items-center justify-between px-5 py-3 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-800">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-5 py-3 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-800">
               <div>
                 <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
                   {preview.length} invoice{preview.length > 1 ? "s" : ""} parsed
@@ -723,13 +791,13 @@ export default function Invoices() {
         {/* Filters */}
         <div className="flex items-center gap-3 flex-wrap">
           <input
-            className="input w-52"
+            className="input w-full sm:w-52"
             placeholder="Search invoices…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <select
-            className="input w-32"
+            className="input flex-1 sm:flex-none sm:w-32"
             value={statusF}
             onChange={(e) => setStatusF(e.target.value)}
           >
@@ -741,7 +809,7 @@ export default function Invoices() {
             ))}
           </select>
           <select
-            className="input w-36"
+            className="input flex-1 sm:flex-none sm:w-36"
             value={monthF}
             onChange={(e) => setMonthF(e.target.value)}
           >
@@ -783,7 +851,7 @@ export default function Invoices() {
             + Standalone credit note
           </button>
           {filtered.length > 0 && (
-            <span className="ml-auto text-sm text-gray-500 dark:text-gray-400">
+            <span className="w-full sm:w-auto sm:ml-auto text-sm text-gray-500 dark:text-gray-400">
               {filtered.length} ·{" "}
               <span className="font-medium text-gray-900 dark:text-gray-100">
                 {fmt(totalF)}
@@ -805,148 +873,145 @@ export default function Invoices() {
             description="Drop your invoice PDFs above to bulk import, or add one manually."
           />
         ) : (
-          <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="thead-row">
-                    <th className="th">Invoice #</th>
-                    <th className="th">Route</th>
-                    <th className="th">Period</th>
-                    <th className="th-r">Days</th>
-                    <th className="th-r">Net</th>
-                    <th className="th-r">VAT</th>
-                    <th className="th-r">Total</th>
-                    <th className="th-r">Received</th>
-                    <th className="th">Status</th>
-                    <th className="th"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {filtered.map((inv) => (
-                    <tr key={inv.id} className="tr">
-                      <td className="td">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="font-mono font-semibold text-gray-900 dark:text-gray-100">
-                            #{inv.invoiceNumber}
-                          </p>
-                          {inv.type === "credit_note" && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
-                              CREDIT NOTE
-                            </span>
-                          )}
-                          {inv.isRevised && (
-                            <span className="chip-red text-xs">superseded</span>
-                          )}
-                          {inv.originalInvoiceId &&
-                            inv.type !== "credit_note" && (
-                              <span className="chip-blue text-xs">revised</span>
-                            )}
-                        </div>
-                        {inv.poNumber && (
-                          <p className="font-mono text-xs text-gray-400 dark:text-gray-500">
-                            {inv.poNumber}
-                          </p>
-                        )}
-                        {inv.revisionNote && (
-                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-                            {inv.revisionNote}
-                          </p>
-                        )}
-                      </td>
-                      <td className="td">
-                        <p className="text-sm text-gray-900 dark:text-gray-100">
-                          Route {cleanNum(inv.routeNumber)}
+          <>
+            {/* Phones: one card per invoice */}
+            <div className="md:hidden space-y-2">
+              {filtered.map((inv) => (
+                <div key={inv.id} className="card p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-mono font-semibold text-gray-900 dark:text-gray-100">
+                          #{inv.invoiceNumber}
                         </p>
-                        <p className="muted">{inv.routeName}</p>
-                        {inv.notes && (
-                          <p className="text-xs text-amber-600 dark:text-amber-400 italic mt-0.5">
-                            {inv.notes}
-                          </p>
-                        )}
-                      </td>
-                      <td className="td text-gray-600 dark:text-gray-400">
+                        {renderTags(inv)}
+                      </div>
+                      <p className="text-sm text-gray-700 dark:text-gray-300">
+                        Route {cleanNum(inv.routeNumber)} · {inv.routeName}
+                      </p>
+                      <p className="muted">
                         {MONTHS_SHORT[inv.month]} {inv.year}
-                      </td>
-                      <td className="td-r text-gray-500 dark:text-gray-400">
-                        {inv.daysWorked || "—"}
-                      </td>
-                      <td className="td-r text-gray-600 dark:text-gray-400">
-                        {fmt(inv.netTotal)}
-                      </td>
-                      <td className="td-r text-gray-400 dark:text-gray-500 text-xs">
-                        {fmt(inv.vat)}
-                      </td>
-                      <td className="td-r font-semibold text-gray-900 dark:text-gray-100">
+                        {inv.daysWorked ? ` · ${inv.daysWorked} days` : ""}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-base font-semibold text-gray-900 dark:text-gray-100">
                         {fmt(inv.total)}
-                      </td>
-                      <td className="td-r font-medium text-green-700 dark:text-green-400">
-                        {inv.paidAmount > 0 ? fmt(inv.paidAmount) : "—"}
-                      </td>
-                      <td className="td">
+                      </p>
+                      <div className="mt-1">
                         <Badge type={inv.status} />
-                      </td>
-                      <td className="td">
-                        <div className="flex gap-1 flex-wrap">
-                          <button
-                            className="btn-ghost"
-                            onClick={() => openEdit(inv)}
-                          >
-                            Edit
-                          </button>
-                          {!inv.isRevised &&
-                            !inv.originalInvoiceId &&
-                            inv.type !== "credit_note" && (
-                              <button
-                                className="btn-ghost text-amber-600 dark:text-amber-400"
-                                onClick={() => openRevise(inv)}
-                              >
-                                Revise
-                              </button>
-                            )}
-                          {inv.type !== "credit_note" &&
-                            inv.status === "paid" && (
-                              <button
-                                className="btn-ghost text-purple-600 dark:text-purple-400"
-                                onClick={() => openCreditNote(inv)}
-                              >
-                                CN
-                              </button>
-                            )}
-                          {inv.type === "credit_note" && (
-                            <button
-                              className="btn-ghost text-purple-600 dark:text-purple-400"
-                              onClick={() => {
-                                const blob = generateCreditNotePDFBlob({
-                                  creditNote: inv,
-                                  settings,
-                                  recipient: null,
-                                });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement("a");
-                                a.href = url;
-                                a.download = `credit-note-${inv.invoiceNumber}.pdf`;
-                                a.click();
-                                URL.revokeObjectURL(url);
-                              }}
-                            >
-                              ↓ PDF
-                            </button>
-                          )}
-                          <button
-                            className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                            onClick={() => del(inv.id)}
-                          >
-                            Del
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    <span>Net {fmt(inv.netTotal)}</span>
+                    <span>VAT {fmt(inv.vat)}</span>
+                    {inv.paidAmount > 0 && (
+                      <span className="text-green-700 dark:text-green-400 font-medium">
+                        Received {fmt(inv.paidAmount)}
+                      </span>
+                    )}
+                  </div>
+                  {inv.revisionNote && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                      {inv.revisionNote}
+                    </p>
+                  )}
+                  {inv.notes && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 italic mt-1">
+                      {inv.notes}
+                    </p>
+                  )}
+                  <div className="flex gap-1 flex-wrap mt-2 -ml-2">
+                    {renderActions(inv)}
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
+
+            {/* Tablets and desktop: table */}
+            <div className="hidden md:block card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="thead-row">
+                      <th className="th">Invoice #</th>
+                      <th className="th">Route</th>
+                      <th className="th">Period</th>
+                      <th className="th-r">Days</th>
+                      <th className="th-r">Net</th>
+                      <th className="th-r">VAT</th>
+                      <th className="th-r">Total</th>
+                      <th className="th-r">Received</th>
+                      <th className="th">Status</th>
+                      <th className="th"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {filtered.map((inv) => (
+                      <tr key={inv.id} className="tr">
+                        <td className="td">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="font-mono font-semibold text-gray-900 dark:text-gray-100">
+                              #{inv.invoiceNumber}
+                            </p>
+                            {renderTags(inv)}
+                          </div>
+                          {inv.poNumber && (
+                            <p className="font-mono text-xs text-gray-400 dark:text-gray-500">
+                              {inv.poNumber}
+                            </p>
+                          )}
+                          {inv.revisionNote && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                              {inv.revisionNote}
+                            </p>
+                          )}
+                        </td>
+                        <td className="td">
+                          <p className="text-sm text-gray-900 dark:text-gray-100">
+                            Route {cleanNum(inv.routeNumber)}
+                          </p>
+                          <p className="muted">{inv.routeName}</p>
+                          {inv.notes && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400 italic mt-0.5">
+                              {inv.notes}
+                            </p>
+                          )}
+                        </td>
+                        <td className="td text-gray-600 dark:text-gray-400">
+                          {MONTHS_SHORT[inv.month]} {inv.year}
+                        </td>
+                        <td className="td-r text-gray-500 dark:text-gray-400">
+                          {inv.daysWorked || "—"}
+                        </td>
+                        <td className="td-r text-gray-600 dark:text-gray-400">
+                          {fmt(inv.netTotal)}
+                        </td>
+                        <td className="td-r text-gray-400 dark:text-gray-500 text-xs">
+                          {fmt(inv.vat)}
+                        </td>
+                        <td className="td-r font-semibold text-gray-900 dark:text-gray-100">
+                          {fmt(inv.total)}
+                        </td>
+                        <td className="td-r font-medium text-green-700 dark:text-green-400">
+                          {inv.paidAmount > 0 ? fmt(inv.paidAmount) : "—"}
+                        </td>
+                        <td className="td">
+                          <Badge type={inv.status} />
+                        </td>
+                        <td className="td">
+                          <div className="flex gap-1 flex-wrap">
+                            {renderActions(inv)}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
