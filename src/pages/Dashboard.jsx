@@ -36,6 +36,7 @@ export default function Dashboard() {
     staffTraining,
     submissions,
     billingRecipients,
+    staffCharges = [],
   } = useApp();
   const defaultRecipient =
     billingRecipients?.find((r) => r.isDefault) ||
@@ -273,7 +274,7 @@ export default function Dashboard() {
           const total = pending.reduce((s, x) => s + (x.invoiceAmount || 0), 0);
           return (
             <div className="rounded-xl border p-4 bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4">
                 <div className="flex items-start gap-3 flex-1 min-w-0">
                   <span className="text-lg mt-0.5">📄</span>
                   <div className="min-w-0">
@@ -313,7 +314,7 @@ export default function Dashboard() {
                 </div>
                 <Link
                   to="/invoice-submissions"
-                  className="btn-ghost text-xs flex-shrink-0"
+                  className="btn-ghost text-xs flex-shrink-0 self-end sm:self-auto"
                 >
                   Review all →
                 </Link>
@@ -327,7 +328,7 @@ export default function Dashboard() {
           <div
             className={`rounded-xl border p-4 ${expiredIssues.length > 0 || criticalIssues.length > 0 ? "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800" : "bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800"}`}
           >
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4">
               <div className="flex items-start gap-3 flex-1 min-w-0">
                 <span className="text-lg mt-0.5">🚨</span>
                 <div className="min-w-0">
@@ -385,7 +386,7 @@ export default function Dashboard() {
               </div>
               <Link
                 to="/compliance"
-                className="btn-ghost text-xs flex-shrink-0"
+                className="btn-ghost text-xs flex-shrink-0 self-end sm:self-auto"
               >
                 View all →
               </Link>
@@ -463,17 +464,30 @@ export default function Dashboard() {
                   const paid = payments
                     .filter((p) => p.staffId === s.id)
                     .reduce((sum, p) => sum + p.amount, 0);
-                  const balance = earned - paid;
+                  // Deductions due up to this month count, as in the Staff
+                  // Ledger, so both screens show the same balance
+                  const nowKey = currentYear() * 12 + currentMonth();
+                  const deducted = staffCharges
+                    .filter(
+                      (c) =>
+                        c.staffId === s.id &&
+                        !c.isExternal &&
+                        c.status !== "waived" &&
+                        c.deductYear * 12 + c.deductMonth <= nowKey,
+                    )
+                    .reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+                  const balance = earned - paid - deducted;
+                  const paidText = `${fmt(paid)} paid${deducted ? ` + ${fmt(deducted)} deducted` : ""} of ${fmt(earned)}`;
                   return (
                     <div
                       key={s.id}
                       className="flex items-center justify-between py-3"
                     >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 avatar text-xs">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-7 h-7 avatar text-xs flex-shrink-0">
                           {s.name[0]}
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                             {s.name}
                           </p>
@@ -482,7 +496,7 @@ export default function Dashboard() {
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right flex-shrink-0 pl-2">
                         {earned === 0 ? (
                           <span className="muted text-xs">—</span>
                         ) : balance > 0.01 ? (
@@ -490,18 +504,14 @@ export default function Dashboard() {
                             <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">
                               Owe {fmt(balance)}
                             </p>
-                            <p className="muted">
-                              {fmt(paid)} paid of {fmt(earned)}
-                            </p>
+                            <p className="muted">{paidText}</p>
                           </div>
                         ) : balance < -0.01 ? (
                           <div>
                             <p className="text-sm font-semibold text-red-600 dark:text-red-400">
                               Overpaid {fmt(Math.abs(balance))}
                             </p>
-                            <p className="muted">
-                              {fmt(paid)} paid of {fmt(earned)}
-                            </p>
+                            <p className="muted">{paidText}</p>
                           </div>
                         ) : (
                           <div>
