@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useApp } from "../context/AppContext";
 import PageHeader from "../components/PageHeader";
 import Modal, { FormField, FormGrid, ModalFooter } from "../components/Modal";
@@ -139,6 +139,23 @@ export default function Attendance() {
 
   const [clipboard, setClipboard] = useState(null); // { status, driverId, driverName, ... }
   const [contextMenu, setContextMenu] = useState(null); // { x, y, date, route }
+  const [showSummary, setShowSummary] = useState(false); // phones: driver days panel
+
+  // Touch screens: press and hold a cell to open the copy/paste menu
+  // (iPhones never send a right-click)
+  const longPress = useRef(null);
+  const startLongPress = (e, payload) => {
+    const t = e.touches?.[0];
+    if (!t) return;
+    longPress.current = setTimeout(() => {
+      longPress.current = "fired";
+      setContextMenu({ x: t.clientX, y: t.clientY, ...payload });
+    }, 500);
+  };
+  const cancelLongPress = () => {
+    if (longPress.current && longPress.current !== "fired")
+      clearTimeout(longPress.current);
+  };
 
   const showConfirm = useConfirm();
 
@@ -1356,14 +1373,14 @@ export default function Attendance() {
         title="Attendance Register"
         subtitle="Daily record of who drove, who attended, and whether each route ran"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {/* <select
               className="input w-36"
               value={month}
               onChange={(e) => setMonth(Number(e.target.value))}
             > */}
             <select
-              className="input w-36"
+              className="input flex-1 sm:flex-none sm:w-36"
               value={month}
               onChange={(e) => {
                 const val = Number(e.target.value);
@@ -1516,6 +1533,12 @@ export default function Attendance() {
               Clear month
             </button>
             <button
+              className="btn-secondary text-sm lg:hidden"
+              onClick={() => setShowSummary(true)}
+            >
+              👥 Driver days
+            </button>
+            <button
               className="btn-primary text-sm"
               onClick={generateAllocations}
             >
@@ -1559,7 +1582,7 @@ export default function Attendance() {
                       <button
                         onClick={() => openBulkAssign(r)}
                         title="Bulk assign driver for this route"
-                        className="opacity-0 group-hover/col:opacity-100 transition-all mt-1 text-[9px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded font-semibold hover:bg-blue-200 w-full"
+                        className="opacity-100 lg:opacity-0 lg:group-hover/col:opacity-100 transition-all mt-1 text-[9px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded font-semibold hover:bg-blue-200 w-full"
                       >
                         bulk
                       </button>
@@ -1599,7 +1622,7 @@ export default function Attendance() {
                             (r) => !!getAtt(day, r.id),
                           ).length;
                           return (
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                            <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all">
                               {unrecorded > 0 && (
                                 <>
                                   <button
@@ -1782,7 +1805,19 @@ export default function Attendance() {
                             </div>
                           ) : (
                             <button
-                              onClick={() => openCell(day, route)}
+                              onClick={() => {
+                                // A press-and-hold just opened the menu
+                                if (longPress.current === "fired") {
+                                  longPress.current = null;
+                                  return;
+                                }
+                                openCell(day, route);
+                              }}
+                              onTouchStart={(e) =>
+                                startLongPress(e, { date: day, route, att })
+                              }
+                              onTouchEnd={cancelLongPress}
+                              onTouchMove={cancelLongPress}
                               onContextMenu={(e) => {
                                 e.preventDefault();
                                 setContextMenu({
@@ -1793,7 +1828,7 @@ export default function Attendance() {
                                   att,
                                 });
                               }}
-                              className={`w-full h-9 rounded-lg border text-xs font-semibold transition-all relative ${STATUS_STYLE[status]} ${isOpen ? "ring-2 ring-blue-400 ring-offset-1" : "hover:opacity-80"}`}
+                              className={`w-full h-9 rounded-lg border text-xs font-semibold transition-all relative select-none [-webkit-touch-callout:none] ${STATUS_STYLE[status]} ${isOpen ? "ring-2 ring-blue-400 ring-offset-1" : "hover:opacity-80"}`}
                             >
                               {label}
                               {att &&
@@ -1874,8 +1909,19 @@ export default function Attendance() {
           )}
         </div>
 
-        {/* ── Right panel: summary ── */}
-        <div className="w-56 flex-shrink-0 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-y-auto">
+        {/* ── Right panel: summary (phones/tablets: full screen via "Driver days") ── */}
+        <div
+          className={`${showSummary ? "fixed inset-0 z-40 block" : "hidden"} lg:static lg:z-auto lg:block w-full lg:w-56 flex-shrink-0 lg:border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-y-auto overscroll-contain`}
+        >
+          <div className="lg:hidden sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700">
+            <button
+              type="button"
+              className="btn-ghost -ml-2 text-sm"
+              onClick={() => setShowSummary(false)}
+            >
+              ← Back to register
+            </button>
+          </div>
           <div className="p-4 border-b border-gray-100 dark:border-gray-700">
             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
               Driver days — {MONTHS_SHORT[month]}
@@ -2791,7 +2837,17 @@ export default function Attendance() {
           />
           <div
             className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 min-w-[180px]"
-            style={{ top: contextMenu.y, left: contextMenu.x }}
+            // Keep the menu on screen near the edges (phones especially)
+            style={{
+              top: Math.max(
+                8,
+                Math.min(contextMenu.y, window.innerHeight - 280),
+              ),
+              left: Math.max(
+                8,
+                Math.min(contextMenu.x, window.innerWidth - 200),
+              ),
+            }}
           >
             {/* Copy option — only if cell has data */}
             {contextMenu.att ? (
