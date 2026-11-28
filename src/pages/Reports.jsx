@@ -155,6 +155,7 @@ export default function Reports() {
     null;
   const clientLabel =
     defaultRecipient?.shortName || defaultRecipient?.name || "Client";
+  const [exportOpen, setExportOpen] = useState(false); // tap-to-open menu
   const [year, setYear] = useState(() => {
     const s = localStorage.getItem("reports_year");
     return s !== null ? parseInt(s) : currentYear();
@@ -361,9 +362,25 @@ export default function Reports() {
               ))}
             </select>
             {/* Export dropdown */}
-            <div className="relative group">
-              <button className="btn-secondary">↓ Export CSV</button>
-              <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg dark:shadow-black/30 py-1 hidden group-hover:block z-10">
+            {/* Opens on tap/click — a hover-only menu can't be used on phones */}
+            <div className="relative">
+              <button
+                className="btn-secondary"
+                onClick={() => setExportOpen((v) => !v)}
+                aria-expanded={exportOpen}
+              >
+                ↓ Export CSV
+              </button>
+              {exportOpen && (
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setExportOpen(false)}
+                  aria-hidden="true"
+                />
+              )}
+              <div
+                className={`absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg dark:shadow-black/30 py-1 z-20 ${exportOpen ? "block" : "hidden"}`}
+              >
                 {[
                   {
                     label: "Monthly P&L",
@@ -381,8 +398,11 @@ export default function Reports() {
                 ].map(({ label, fn }) => (
                   <button
                     key={label}
-                    onClick={fn}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    onClick={() => {
+                      fn();
+                      setExportOpen(false);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   >
                     {label}
                   </button>
@@ -804,7 +824,7 @@ export default function Reports() {
             </div>
 
             {/* Summary buckets */}
-            <div className="grid grid-cols-4 gap-0 border-b border-gray-100 dark:border-gray-700">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 border-b border-gray-100 dark:border-gray-700 [&>*]:border-b sm:[&>*]:border-b-0">
               {agedBuckets.map((b) => (
                 <div
                   key={b.label}
@@ -1074,7 +1094,7 @@ export default function Reports() {
             {/* Filters */}
             <div className="flex gap-3 mt-4 flex-wrap items-center">
               <select
-                className="input w-56"
+                className="input w-full sm:w-56"
                 value={journeyRouteId}
                 onChange={(e) => setJourneyRouteId(e.target.value)}
               >
@@ -1085,23 +1105,23 @@ export default function Reports() {
                   </option>
                 ))}
               </select>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-1 sm:flex-none min-w-[9rem]">
                 <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
                   From
                 </label>
                 <input
-                  className="input w-36"
+                  className="input w-full sm:w-36"
                   type="date"
                   value={journeyFrom}
                   onChange={(e) => setJourneyFrom(e.target.value)}
                 />
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-1 sm:flex-none min-w-[9rem]">
                 <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
                   To
                 </label>
                 <input
-                  className="input w-36"
+                  className="input w-full sm:w-36"
                   type="date"
                   value={journeyTo}
                   onChange={(e) => setJourneyTo(e.target.value)}
