@@ -430,7 +430,16 @@ export default function Allocations() {
 
   // Month totals
   const totalRegular = filtered.reduce((s, a) => s + (a.regularAmount || 0), 0);
-  const totalTemp = filtered.reduce((s, a) => s + (a.tempAmount || 0), 0);
+  // All cover pay — every cover driver and cover PA (older allocations: the
+  // single temp fields)
+  const totalCover = filtered.reduce(
+    (s, a) =>
+      s +
+      (a.coverEntries?.length > 0
+        ? a.coverEntries.reduce((t, c) => t + (Number(c.amount) || 0), 0)
+        : Number(a.tempAmount) || 0),
+    0,
+  );
   const totalOwed = filtered.reduce((s, a) => s + getAllocTotalCost(a), 0);
 
   // Days check — warn if allocation days don't match invoice days
@@ -700,7 +709,7 @@ export default function Allocations() {
         </select>
 
         {filtered.length > 0 && (
-          <div className="ml-auto flex items-center gap-6 text-sm">
+          <div className="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
             <span className="text-gray-500 dark:text-gray-400">
               Regular staff:{" "}
               <span className="font-semibold text-gray-900 dark:text-gray-100">
@@ -708,9 +717,9 @@ export default function Allocations() {
               </span>
             </span>
             <span className="text-gray-500 dark:text-gray-400">
-              Temp staff:{" "}
+              Cover staff:{" "}
               <span className="font-semibold text-gray-900 dark:text-gray-100">
-                {fmt(totalTemp)}
+                {fmt(totalCover)}
               </span>
             </span>
             <span className="text-gray-500 dark:text-gray-400">
@@ -736,208 +745,341 @@ export default function Allocations() {
             }
           />
         ) : (
-          <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="thead-row">
-                    <th className="th">Route</th>
-                    <th className="th">Regular staff</th>
-                    <th className="th-r">Days</th>
-                    <th className="th-r">Rate</th>
-                    <th className="th-r">Owed</th>
-                    <th className="th" colSpan={3}>
-                      Cover drivers
-                    </th>
-                    <th className="th-r">Extras</th>
-                    <th className="th-r">PA owed</th>
-                    <th className="th-r">Total owed</th>
-                    <th className="th"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {filtered.map((a) => {
-                    const warning = getDaysWarning(a);
-                    return (
-                      <tr key={a.id} className="tr">
-                        <td className="td">
-                          <p className="font-semibold text-gray-900 dark:text-gray-100">
-                            Route {a.routeNumber.replace(/^route\s+/i, "")}
-                          </p>
-                          <p className="muted">{a.routeName}</p>
-                          {warning && (
-                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-                              ⚠ {warning}
+          <>
+            {/* Phones: one card per route */}
+            <div className="md:hidden space-y-2">
+              {filtered.map((a) => {
+                const warning = getDaysWarning(a);
+                const driverCovers =
+                  a.coverEntries?.length > 0
+                    ? a.coverEntries.filter((c) => !isPaCover(c))
+                    : a.tempDays > 0
+                      ? [
+                          {
+                            staffId: a.tempStaffId,
+                            staffName: a.tempStaffName,
+                            days: a.tempDays,
+                            rate: a.tempRate,
+                            amount: a.tempAmount,
+                          },
+                        ]
+                      : [];
+                const paCovers = (a.coverEntries || []).filter(isPaCover);
+                const extras = (a.additiveEntries || []).filter(
+                  (x) => Number(x.amount) > 0,
+                );
+                const line = (key, who, detail, amount) => (
+                  <div key={key} className="flex justify-between gap-3">
+                    <span className="min-w-0 text-gray-600 dark:text-gray-400">
+                      <span className="text-gray-900 dark:text-gray-100 font-medium">
+                        {who}
+                      </span>{" "}
+                      · {detail}
+                    </span>
+                    <span className="flex-shrink-0 text-gray-900 dark:text-gray-100">
+                      {fmt(amount)}
+                    </span>
+                  </div>
+                );
+                return (
+                  <div key={a.id} className="card p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 dark:text-gray-100">
+                          Route {a.routeNumber.replace(/^route\s+/i, "")}
+                        </p>
+                        <p className="muted">
+                          {a.routeName} · {a.totalDays} days
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-base font-semibold text-green-700 dark:text-green-400">
+                          {fmt(getAllocTotalCost(a))}
+                        </p>
+                        <p className="muted">total owed</p>
+                      </div>
+                    </div>
+                    {warning && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                        ⚠ {warning}
+                      </p>
+                    )}
+                    <div className="mt-3 space-y-1 text-xs">
+                      {line(
+                        "reg",
+                        getStaffName(a.regularStaffId),
+                        `${a.regularDays}d × ${fmt(a.regularRate)}`,
+                        a.regularAmount,
+                      )}
+                      {driverCovers.map((c, i) =>
+                        line(
+                          `c${i}`,
+                          c.staffName || getStaffName(c.staffId),
+                          `cover ${c.days}d × ${fmt(c.rate)}`,
+                          c.amount,
+                        ),
+                      )}
+                      {Number(a.paAmount) > 0 &&
+                        line(
+                          "pa",
+                          a.paStaffName || getStaffName(a.paStaffId),
+                          `PA ${a.paDays}d × ${fmt(a.paRate)}`,
+                          a.paAmount,
+                        )}
+                      {paCovers.map((c, i) =>
+                        line(
+                          `p${i}`,
+                          c.staffName || getStaffName(c.staffId),
+                          `cover PA ${c.days}d × ${fmt(c.rate)}`,
+                          c.amount,
+                        ),
+                      )}
+                      {extras.map((x, i) =>
+                        line(
+                          `x${i}`,
+                          x.staffName || getStaffName(x.staffId),
+                          x.description || "extra",
+                          x.amount,
+                        ),
+                      )}
+                    </div>
+                    {a.absenceReason && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                        📋 {a.absenceReason}
+                      </p>
+                    )}
+                    <div className="flex gap-1 mt-2 -ml-2">
+                      <button className="btn-ghost" onClick={() => openEdit(a)}>
+                        Edit
+                      </button>
+                      <button
+                        className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        onClick={() => del(a.id)}
+                      >
+                        Del
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="card p-4 flex items-center justify-between text-sm font-semibold text-gray-900 dark:text-gray-100">
+                <span>Total owed ({filtered.length} routes)</span>
+                <span className="text-green-700 dark:text-green-400">
+                  {fmt(totalOwed)}
+                </span>
+              </div>
+            </div>
+
+            {/* Tablets and desktop: table */}
+            <div className="hidden md:block card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="thead-row">
+                      <th className="th">Route</th>
+                      <th className="th">Regular staff</th>
+                      <th className="th-r">Days</th>
+                      <th className="th-r">Rate</th>
+                      <th className="th-r">Owed</th>
+                      <th className="th" colSpan={3}>
+                        Cover drivers
+                      </th>
+                      <th className="th-r">Extras</th>
+                      <th className="th-r">PA owed</th>
+                      <th className="th-r">Total owed</th>
+                      <th className="th"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {filtered.map((a) => {
+                      const warning = getDaysWarning(a);
+                      return (
+                        <tr key={a.id} className="tr">
+                          <td className="td">
+                            <p className="font-semibold text-gray-900 dark:text-gray-100">
+                              Route {a.routeNumber.replace(/^route\s+/i, "")}
                             </p>
-                          )}
-                        </td>
-                        <td className="td">
-                          <p className="text-sm text-gray-900 dark:text-gray-100">
-                            {getStaffName(a.regularStaffId)}
-                          </p>
-                          <p className="muted">{a.totalDays} total days</p>
-                          {a.absenceReason && (
-                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-                              📋 {a.absenceReason}
+                            <p className="muted">{a.routeName}</p>
+                            {warning && (
+                              <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                                ⚠ {warning}
+                              </p>
+                            )}
+                          </td>
+                          <td className="td">
+                            <p className="text-sm text-gray-900 dark:text-gray-100">
+                              {getStaffName(a.regularStaffId)}
                             </p>
-                          )}
-                        </td>
-                        <td className="td-r text-gray-700 dark:text-gray-300">
-                          {a.regularDays}
-                        </td>
-                        <td className="td-r text-gray-500 dark:text-gray-400">
-                          {fmt(a.regularRate)}
-                          {Math.abs(
-                            a.regularDays * a.regularRate - a.regularAmount,
-                          ) > 0.01 && (
-                            <span className="text-[10px] text-blue-500 dark:text-blue-400 ml-1">
-                              split
-                            </span>
-                          )}
-                        </td>
-                        <td className="td-r font-medium text-gray-900 dark:text-gray-100">
-                          {fmt(a.regularAmount)}
-                        </td>
-                        <td className="td" colSpan={3}>
-                          {(() => {
-                            const entries =
-                              a.coverEntries?.length > 0
-                                ? a.coverEntries.filter((c) => !isPaCover(c))
-                                : a.tempDays > 0
-                                  ? [
-                                      {
-                                        staffId: a.tempStaffId,
-                                        staffName: a.tempStaffName,
-                                        days: a.tempDays,
-                                        rate: a.tempRate,
-                                        amount: a.tempAmount,
-                                      },
-                                    ]
-                                  : [];
-                            if (entries.length === 0)
-                              return <span className="muted">—</span>;
-                            return (
-                              <div className="space-y-1">
-                                {entries.map((c, i) => (
-                                  <div
-                                    key={i}
-                                    className="flex items-center gap-2 text-xs"
-                                  >
-                                    <span className="text-gray-700 dark:text-gray-300 font-medium min-w-0 truncate">
-                                      {c.staffName || getStaffName(c.staffId)}
-                                    </span>
-                                    <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">
-                                      {c.days}d × {fmt(c.rate)}
-                                    </span>
-                                    <span className="text-gray-700 dark:text-gray-300 font-medium flex-shrink-0">
-                                      {fmt(c.amount)}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            );
-                          })()}
-                        </td>
-                        <td className="td-r text-gray-700 dark:text-gray-300">
-                          {(() => {
-                            const entries = (a.additiveEntries || []).filter(
-                              (e) => Number(e.amount) > 0,
-                            );
-                            const total = entries.reduce(
-                              (s, e) => s + (Number(e.amount) || 0),
-                              0,
-                            );
-                            return total > 0 ? (
-                              <div>
-                                <div className="font-medium">{fmt(total)}</div>
-                                {entries.map((e, i) => (
-                                  <div
-                                    key={i}
-                                    className="text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[80px]"
-                                  >
-                                    {e.description}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="muted">—</span>
-                            );
-                          })()}
-                        </td>
-                        <td className="td-r text-gray-700 dark:text-gray-300">
-                          {(() => {
-                            const paCovers = (a.coverEntries || []).filter(
-                              isPaCover,
-                            );
-                            const total =
-                              (Number(a.paAmount) || 0) +
-                              paCovers.reduce(
-                                (s, c) => s + (Number(c.amount) || 0),
+                            <p className="muted">{a.totalDays} total days</p>
+                            {a.absenceReason && (
+                              <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                                📋 {a.absenceReason}
+                              </p>
+                            )}
+                          </td>
+                          <td className="td-r text-gray-700 dark:text-gray-300">
+                            {a.regularDays}
+                          </td>
+                          <td className="td-r text-gray-500 dark:text-gray-400">
+                            {fmt(a.regularRate)}
+                            {Math.abs(
+                              a.regularDays * a.regularRate - a.regularAmount,
+                            ) > 0.01 && (
+                              <span className="text-[10px] text-blue-500 dark:text-blue-400 ml-1">
+                                split
+                              </span>
+                            )}
+                          </td>
+                          <td className="td-r font-medium text-gray-900 dark:text-gray-100">
+                            {fmt(a.regularAmount)}
+                          </td>
+                          <td className="td" colSpan={3}>
+                            {(() => {
+                              const entries =
+                                a.coverEntries?.length > 0
+                                  ? a.coverEntries.filter((c) => !isPaCover(c))
+                                  : a.tempDays > 0
+                                    ? [
+                                        {
+                                          staffId: a.tempStaffId,
+                                          staffName: a.tempStaffName,
+                                          days: a.tempDays,
+                                          rate: a.tempRate,
+                                          amount: a.tempAmount,
+                                        },
+                                      ]
+                                    : [];
+                              if (entries.length === 0)
+                                return <span className="muted">—</span>;
+                              return (
+                                <div className="space-y-1">
+                                  {entries.map((c, i) => (
+                                    <div
+                                      key={i}
+                                      className="flex items-center gap-2 text-xs"
+                                    >
+                                      <span className="text-gray-700 dark:text-gray-300 font-medium min-w-0 truncate">
+                                        {c.staffName || getStaffName(c.staffId)}
+                                      </span>
+                                      <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">
+                                        {c.days}d × {fmt(c.rate)}
+                                      </span>
+                                      <span className="text-gray-700 dark:text-gray-300 font-medium flex-shrink-0">
+                                        {fmt(c.amount)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </td>
+                          <td className="td-r text-gray-700 dark:text-gray-300">
+                            {(() => {
+                              const entries = (a.additiveEntries || []).filter(
+                                (e) => Number(e.amount) > 0,
+                              );
+                              const total = entries.reduce(
+                                (s, e) => s + (Number(e.amount) || 0),
                                 0,
                               );
-                            if (total <= 0)
-                              return <span className="muted">—</span>;
-                            return (
-                              <div>
-                                <div className="font-medium">{fmt(total)}</div>
-                                {paCovers.map((c, i) => (
-                                  <div
-                                    key={i}
-                                    className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap"
-                                  >
-                                    cover:{" "}
-                                    {c.staffName || getStaffName(c.staffId)}{" "}
-                                    {c.days}d
+                              return total > 0 ? (
+                                <div>
+                                  <div className="font-medium">
+                                    {fmt(total)}
                                   </div>
-                                ))}
-                              </div>
-                            );
-                          })()}
-                        </td>
-                        <td className="td-r font-semibold text-green-700 dark:text-green-400">
-                          {fmt(getAllocTotalCost(a))}
-                        </td>
-                        <td className="td">
-                          <div className="flex gap-1">
-                            <button
-                              className="btn-ghost"
-                              onClick={() => openEdit(a)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                              onClick={() => del(a.id)}
-                            >
-                              Del
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="tfoot-row">
-                    <td
-                      className="td font-bold text-gray-900 dark:text-gray-100"
-                      colSpan={4}
-                    >
-                      Total
-                    </td>
-                    <td className="td-r font-semibold">{fmt(totalRegular)}</td>
-                    <td colSpan={3} />
-                    <td />
-                    <td />
-                    <td className="td-r font-bold text-green-700 dark:text-green-400">
-                      {fmt(totalOwed)}
-                    </td>
-                    <td />
-                  </tr>
-                </tfoot>
-              </table>
+                                  {entries.map((e, i) => (
+                                    <div
+                                      key={i}
+                                      className="text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[80px]"
+                                    >
+                                      {e.description}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="muted">—</span>
+                              );
+                            })()}
+                          </td>
+                          <td className="td-r text-gray-700 dark:text-gray-300">
+                            {(() => {
+                              const paCovers = (a.coverEntries || []).filter(
+                                isPaCover,
+                              );
+                              const total =
+                                (Number(a.paAmount) || 0) +
+                                paCovers.reduce(
+                                  (s, c) => s + (Number(c.amount) || 0),
+                                  0,
+                                );
+                              if (total <= 0)
+                                return <span className="muted">—</span>;
+                              return (
+                                <div>
+                                  <div className="font-medium">
+                                    {fmt(total)}
+                                  </div>
+                                  {paCovers.map((c, i) => (
+                                    <div
+                                      key={i}
+                                      className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap"
+                                    >
+                                      cover:{" "}
+                                      {c.staffName || getStaffName(c.staffId)}{" "}
+                                      {c.days}d
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </td>
+                          <td className="td-r font-semibold text-green-700 dark:text-green-400">
+                            {fmt(getAllocTotalCost(a))}
+                          </td>
+                          <td className="td">
+                            <div className="flex gap-1">
+                              <button
+                                className="btn-ghost"
+                                onClick={() => openEdit(a)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                onClick={() => del(a.id)}
+                              >
+                                Del
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="tfoot-row">
+                      <td
+                        className="td font-bold text-gray-900 dark:text-gray-100"
+                        colSpan={4}
+                      >
+                        Total
+                      </td>
+                      <td className="td-r font-semibold">
+                        {fmt(totalRegular)}
+                      </td>
+                      <td colSpan={3} />
+                      <td />
+                      <td />
+                      <td className="td-r font-bold text-green-700 dark:text-green-400">
+                        {fmt(totalOwed)}
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
 
