@@ -7,6 +7,7 @@ const ACTION_STYLES = {
   create: "chip-green",
   update: "chip-blue",
   delete: "chip-red",
+  reminder: "chip-amber",
 };
 
 const ENTITY_ICONS = {
@@ -16,6 +17,8 @@ const ENTITY_ICONS = {
   staff: "👤",
   allocation: "📋",
   remittance: "💳",
+  deduction: "➖",
+  submission: "📄",
 };
 
 function formatChanges(changes) {
@@ -31,26 +34,28 @@ function formatChanges(changes) {
       "to" in val
     ) {
       return (
-        <div key={key} className="flex items-start gap-2 text-xs">
-          <span className="text-gray-400 dark:text-gray-500 w-28 flex-shrink-0 capitalize">
+        <div key={key} className="flex flex-wrap items-start gap-x-2 text-xs">
+          <span className="text-gray-400 dark:text-gray-500 w-full sm:w-28 flex-shrink-0 capitalize">
             {key.replace(/([A-Z])/g, " $1").trim()}
           </span>
-          <span className="text-red-500 dark:text-red-400 line-through">
+          <span className="text-red-500 dark:text-red-400 line-through break-all">
             {String(val.from)}
           </span>
           <span className="text-gray-400 dark:text-gray-500">→</span>
-          <span className="text-green-600 dark:text-green-400">
+          <span className="text-green-600 dark:text-green-400 break-all">
             {String(val.to)}
           </span>
         </div>
       );
     }
     return (
-      <div key={key} className="flex items-start gap-2 text-xs">
-        <span className="text-gray-400 dark:text-gray-500 w-28 flex-shrink-0 capitalize">
+      <div key={key} className="flex flex-wrap items-start gap-x-2 text-xs">
+        <span className="text-gray-400 dark:text-gray-500 w-full sm:w-28 flex-shrink-0 capitalize">
           {key.replace(/([A-Z])/g, " $1").trim()}
         </span>
-        <span className="text-gray-700 dark:text-gray-300">{String(val)}</span>
+        <span className="text-gray-700 dark:text-gray-300 break-all">
+          {String(val)}
+        </span>
       </div>
     );
   });
@@ -70,7 +75,7 @@ export default function AuditLog() {
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader
         title="Audit log"
-        subtitle={`${auditLog.length} events recorded`}
+        subtitle={`Latest ${auditLog.length} events`}
       />
 
       <div className="page-body">
@@ -92,7 +97,7 @@ export default function AuditLog() {
                     {entries.map((entry) => (
                       <div
                         key={entry.id}
-                        className="flex items-start gap-4 px-5 py-3"
+                        className="flex items-start gap-3 sm:gap-4 px-4 sm:px-5 py-3"
                       >
                         {/* Icon */}
                         <div className="text-xl flex-shrink-0 mt-0.5">
